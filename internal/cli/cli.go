@@ -494,6 +494,13 @@ func buildSurface(p *workspace.Program) (*surface.Plan, error) {
 	return plan, nil
 }
 
+// scopeHosts is the host allow-list used when importing a browser HAR.
+func scopeHosts(p *workspace.Program) []string {
+	hosts := append([]string{}, p.ExactHosts()...)
+	hosts = append(hosts, p.DeriveDomains()...)
+	return recon.Uniq(hosts)
+}
+
 // intakeSurface converts Phase 0 assets into surface hints. Out-of-scope
 // assets are deliberately dropped: they must never reach a test queue.
 func intakeSurface(p *workspace.Program) ([]surface.NonWebAsset, []string) {
@@ -653,7 +660,7 @@ func cmdSession(args []string) int {
 			if err != nil {
 				return fail(err)
 			}
-			add, err = session.ImportHAR(b)
+			add, err = session.ImportHARForHosts(b, scopeHosts(p))
 			if err != nil {
 				return fail(err)
 			}

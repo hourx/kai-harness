@@ -61,6 +61,26 @@ func TestImportHAR(t *testing.T) {
 	}
 }
 
+func TestImportHARForHostsFiltersThirdPartyCookies(t *testing.T) {
+	har := []byte(`{"log":{"entries":[
+	  {"request":{"url":"https://claude.ai/login","headers":[{"name":"Cookie","value":"sid=target; theme=dark"}]}},
+	  {"request":{"url":"https://analytics.example.com/track","headers":[{"name":"Cookie","value":"ga=thirdparty"}]}},
+	  {"request":{"url":"https://cdn.example.net/app.js","cookies":[{"name":"cdnkey","value":"leak","domain":".example.net"}]}}
+	]}}`)
+	s, err := ImportHARForHosts(har, []string{"claude.ai"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(s.Cookies) != 2 {
+		t.Fatalf("cookies = %+v, want only the two claude.ai cookies", s.Cookies)
+	}
+	for _, c := range s.Cookies {
+		if strings.HasPrefix(c.Name, "ga") || strings.HasPrefix(c.Name, "cdn") {
+			t.Errorf("third-party cookie leaked: %+v", c)
+		}
+	}
+}
+
 func TestImportHARRejectsJunk(t *testing.T) {
 	if _, err := ImportHAR([]byte("not json")); err == nil {
 		t.Error("expected an error for a non-HAR file")

@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"sort"
@@ -111,13 +112,15 @@ type harFile struct {
 	Log struct {
 		Entries []struct {
 			Request struct {
+				URL     string `json:"url"`
 				Headers []struct {
 					Name  string `json:"name"`
 					Value string `json:"value"`
 				} `json:"headers"`
 				Cookies []struct {
-					Name  string `json:"name"`
-					Value string `json:"value"`
+					Name   string `json:"name"`
+					Value  string `json:"value"`
+					Domain string `json:"domain"`
 				} `json:"cookies"`
 			} `json:"request"`
 		} `json:"entries"`
@@ -126,8 +129,16 @@ type harFile struct {
 
 // ImportHAR extracts Cookie and Authorization headers from a HAR export.
 // Only those two are taken: anything else is noise or another secret that
-// belongs nowhere near a shared archive.
+// belongs nowhere near a shared archive. Callers that know the program scope
+// should use ImportHARForHosts so third-party cookies are never picked up.
 func ImportHAR(data []byte) (*Store, error) {
+	return ImportHARForHosts(data, nil)
+}
+
+// ImportHARForHosts is ImportHAR restricted to in-scope hosts. A browser HAR
+// contains requests to analytics, CDNs and social sites; importing all their
+// cookies would mean sending unrelated credentials to the target.
+func ImportHARForHosts(data []byte, hosts []string) (*Store, error) {
 	var f harFile
 	if err := json.Unmarshal(data, &f); err != nil {
 		return nil, fmt.Errorf("not a HAR file: %w", err)
@@ -137,6 +148,14 @@ func ImportHAR(data []byte) (*Store, error) {
 	}
 	s := &Store{Source: "har", CreatedAt: time.Now().UTC(), Headers: map[string]string{}}
 	for _, e := range f.Log.Entries {
+		u, err := url.Parse(e.Request.URL)
+		requestHost := ""
+		if err == nil {
+			requestHost = strings.ToLower(u.Hostname())
+		}
+		if len(hosts) > 0 && !hostAllowed(hosts, requestHost) {
+			continue
+		}
 		for _, h := range e.Request.Headers {
 			switch strings.ToLower(strings.TrimSpace(h.Name)) {
 			case "cookie":
@@ -148,19 +167,31 @@ func ImportHAR(data []byte) (*Store, error) {
 			}
 		}
 		for _, c := range e.Request.Cookies {
-			if c.Name != "" {
-				s.Cookies = append(s.Cookies, Cookie{Name: c.Name, Value: c.Value})
+			if c.Name == "" || (len(hosts) > 0 && c.Domain != "" && !hostAllowed(hosts, c.Domain)) {
+				continue
 			}
+			s.Cookies = append(s.Cookies, Cookie{Name: c.Name, Value: c.Value})
 		}
 	}
 	s.Cookies = dedupe(s.Cookies)
 	if len(s.Cookies) == 0 && len(s.Headers) == 0 {
-		return nil, errors.New("HAR contained no Cookie or Authorization header")
+		return nil, errors.New("HAR contained no Cookie or Authorization header for in-scope hosts")
 	}
 	if len(s.Headers) == 0 {
 		s.Headers = nil
 	}
 	return s, nil
+}
+
+func hostAllowed(hosts []string, host string) bool {
+	host = strings.ToLower(strings.TrimSuffix(strings.TrimSpace(host), "."))
+	for _, h := range hosts {
+		h = strings.ToLower(strings.TrimSuffix(strings.TrimSpace(h), "."))
+		if h != "" && (host == h || strings.HasSuffix(host, "."+h)) {
+			return true
+		}
+	}
+	return false
 }
 
 func dedupe(in []Cookie) []Cookie {
