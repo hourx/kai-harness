@@ -35,6 +35,7 @@ Commands:
   intake  <url|handle> [--name slug] [--dry-run] [--force] [--trust-scope]
                                                              Phase 0: read program
   boundaries <program>                                      print scope limits & rules
+  rules-diff <program>                                      what changed since last intake
   scope   <program> <host|cidr>                              scope gate (IN/OUT)
   recon   <program> [--domain d] [--rps N] [--max-hosts N]
                     [--max-bundles N] [--nuclei] [--no-session] [--step]
@@ -77,6 +78,8 @@ func Run(args []string) int {
 		return cmdScope(args[1:])
 	case "boundaries":
 		return cmdBoundaries(args[1:])
+	case "rules-diff":
+		return cmdRulesDiff(args[1:])
 	case "recon":
 		return cmdRecon(args[1:])
 	case "session":
@@ -203,6 +206,9 @@ func cmdIntake(args []string) int {
 		in.URL, platform, in.FetchedAt.Format(time.RFC3339), len(in.Assets), len(in.Candidates)))
 
 	fmt.Print(in.Markdown())
+	if rd, err := program.LoadRulesDiff(p.Dir); err == nil && rd.Changed() {
+		fmt.Println("\nwarning rules changed since the last intake — run: bountykit rules-diff " + slug)
+	}
 	fmt.Printf("\nworkspace  %s\n", p.Dir)
 	sc := in.Scope()
 	if len(sc.In) > 0 {
@@ -257,6 +263,22 @@ func cmdBoundaries(args []string) int {
 		return fail(fmt.Errorf("no boundaries yet — run: bountykit intake <url> --name %s", p.Name))
 	}
 	fmt.Print(string(b))
+	return 0
+}
+
+func cmdRulesDiff(args []string) int {
+	if len(args) != 1 {
+		return fail(errors.New("usage: bountykit rules-diff <program>"))
+	}
+	p, err := workspace.Open(args[0])
+	if err != nil {
+		return fail(err)
+	}
+	d, err := program.LoadRulesDiff(p.Dir)
+	if err != nil {
+		return fail(fmt.Errorf("no rule diff yet — run: bountykit intake <url> --name %s", p.Name))
+	}
+	fmt.Print(d.Markdown())
 	return 0
 }
 
@@ -393,8 +415,9 @@ func buildSurface(p *workspace.Program) (*surface.Plan, error) {
 	if err != nil {
 		return nil, err
 	}
-	if len(store.Endpoints) == 0 && len(store.Hosts) == 0 {
-		return nil, errors.New("no assets yet — run: bountykit recon " + p.Name)
+	nonWeb, constraints := intakeSurface(p)
+	if len(store.Endpoints) == 0 && len(store.Hosts) == 0 && len(nonWeb) == 0 {
+		return nil, errors.New("no assets yet — run: bountykit recon " + p.Name + " (or bountykit intake <url>)")
 	}
 	now := time.Now().UTC()
 
@@ -402,7 +425,7 @@ func buildSurface(p *workspace.Program) (*surface.Plan, error) {
 	for path, e := range store.Endpoints {
 		endpoints[path] = e.Params
 	}
-	m := surface.Build(p.Name, endpoints, now)
+	m := surface.BuildWithNonWeb(p.Name, endpoints, nonWeb, now)
 	if err := os.WriteFile(filepath.Join(p.Dir, "map.md"), []byte(m.Markdown()), 0o600); err != nil {
 		return nil, err
 	}
@@ -412,6 +435,7 @@ func buildSurface(p *workspace.Program) (*surface.Plan, error) {
 
 	d, _ := recon.LoadDiff(p.Dir)
 	plan := surface.BuildPlan(p.Name, m, endpoints, d, store.Hosts, now)
+	surface.AddNonWeb(plan, nonWeb, constraints)
 	if err := os.WriteFile(filepath.Join(p.Dir, "next.md"), []byte(plan.Markdown()), 0o600); err != nil {
 		return nil, err
 	}
@@ -419,6 +443,31 @@ func buildSurface(p *workspace.Program) (*surface.Plan, error) {
 		return nil, err
 	}
 	return plan, nil
+}
+
+// intakeSurface converts Phase 0 assets into surface hints. Out-of-scope
+// assets are deliberately dropped: they must never reach a test queue.
+func intakeSurface(p *workspace.Program) ([]surface.NonWebAsset, []string) {
+	b, err := os.ReadFile(filepath.Join(p.Dir, "intake.json"))
+	if err != nil {
+		return nil, nil
+	}
+	var in program.Intake
+	if err := json.Unmarshal(b, &in); err != nil {
+		return nil, nil
+	}
+	sc := in.Scope()
+	var out []surface.NonWebAsset
+	for _, a := range sc.NonWeb {
+		out = append(out, surface.NonWebAsset{Identifier: a.Identifier, Type: a.Type, Detail: a.Instruction})
+	}
+	for _, a := range sc.PathOnly {
+		out = append(out, surface.NonWebAsset{Identifier: a.Identifier, Type: a.Type, Detail: "path-restricted, no host rule"})
+	}
+	for _, c := range in.Candidates {
+		out = append(out, surface.NonWebAsset{Identifier: c.Identifier, Type: c.Type, Detail: "section: " + c.Section, Unverified: !in.TrustScope})
+	}
+	return out, in.Boundaries.Notes
 }
 
 func writeJSON(path string, v any) error {

@@ -11,6 +11,15 @@ import (
 	"time"
 )
 
+// NonWebAsset is an in-scope target that has no host-level scope rule: a repo,
+// contract, app ID, API path or an AI/model surface.
+type NonWebAsset struct {
+	Identifier string `json:"identifier"`
+	Type       string `json:"type"`
+	Detail     string `json:"detail,omitempty"`
+	Unverified bool   `json:"unverified,omitempty"`
+}
+
 // Ref is a path segment that looks like an object reference.
 type Ref struct {
 	Endpoint string `json:"endpoint"`
@@ -37,8 +46,9 @@ type Map struct {
 	IDParams    map[string][]string `json:"id_params,omitempty"`
 	Refs        []Ref               `json:"refs,omitempty"`
 	// Loose are parameter names found in JavaScript with no path of their own.
-	Loose []string `json:"loose_params,omitempty"`
-	Stats Stats    `json:"stats"`
+	Loose  []string      `json:"loose_params,omitempty"`
+	NonWeb []NonWebAsset `json:"non_web,omitempty"`
+	Stats  Stats         `json:"stats"`
 }
 
 var (
@@ -69,6 +79,11 @@ var idNames = map[string]bool{
 
 // Build assembles the map from path -> params.
 func Build(program string, endpoints map[string][]string, now time.Time) *Map {
+	return BuildWithNonWeb(program, endpoints, nil, now)
+}
+
+// BuildWithNonWeb also records non-host targets from Phase 0 intake.
+func BuildWithNonWeb(program string, endpoints map[string][]string, nonWeb []NonWebAsset, now time.Time) *Map {
 	m := &Map{
 		Program:   program,
 		Generated: now.UTC().Format(time.RFC3339),
@@ -114,6 +129,13 @@ func Build(program string, endpoints map[string][]string, now time.Time) *Map {
 	m.APIVersions = keys(versions)
 	m.GraphQL = keys(graphql)
 	m.Loose = UniqLoose(endpoints["*"])
+	m.NonWeb = nonWeb
+	sort.Slice(m.NonWeb, func(i, j int) bool {
+		if m.NonWeb[i].Type != m.NonWeb[j].Type {
+			return m.NonWeb[i].Type < m.NonWeb[j].Type
+		}
+		return m.NonWeb[i].Identifier < m.NonWeb[j].Identifier
+	})
 	sort.Slice(m.Refs, func(i, j int) bool {
 		if m.Refs[i].Endpoint != m.Refs[j].Endpoint {
 			return m.Refs[i].Endpoint < m.Refs[j].Endpoint
@@ -320,6 +342,17 @@ func (m *Map) Markdown() string {
 		sort.Strings(params)
 		for _, p := range params {
 			fmt.Fprintf(&b, "| `%s` | %s |\n", p, "`"+strings.Join(m.IDParams[p], "`, `")+"`")
+		}
+		b.WriteString("\n")
+	}
+	if len(m.NonWeb) > 0 {
+		b.WriteString("## Non-web assets\n\n")
+		for _, a := range m.NonWeb {
+			mark := ""
+			if a.Unverified {
+				mark = " (candidate from prose — verify)"
+			}
+			fmt.Fprintf(&b, "- `%s` — %s%s\n", a.Identifier, a.Type, mark)
 		}
 		b.WriteString("\n")
 	}

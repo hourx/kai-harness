@@ -80,9 +80,10 @@ type Intake struct {
 	Candidates    []Candidate             `json:"candidate_assets,omitempty"`
 	Constraints   []string                `json:"constraints,omitempty"`
 	Boundaries    Boundaries              `json:"boundaries,omitempty"`
-	TrustScope    bool                    `json:"-"`
+	TrustScope    bool                    `json:"trust_scope,omitempty"`
 	Scorecard     Score                   `json:"scorecard,omitempty"`
 	Policy        string                  `json:"-"`
+	PolicyHash    string                  `json:"policy_hash,omitempty"`
 	FetchedAt     time.Time               `json:"fetched_at"`
 }
 

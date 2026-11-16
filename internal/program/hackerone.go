@@ -294,6 +294,7 @@ func FetchHackerOne(ctx context.Context, c *netx.Client, handle string) (*Intake
 		in.Boundaries = ExtractBoundaries(in.Policy, "structured")
 		in.Boundaries.ScopeIsStructured = len(in.Assets) > 0
 	}
+	in.PolicyHash = hashPolicy(in.Policy)
 	return in, nil
 }
 

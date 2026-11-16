@@ -138,6 +138,11 @@ func Build(p *workspace.Program, opts Options) (Result, error) {
 			return Result{}, err
 		}
 	}
+	if b, err := os.ReadFile(filepath.Join(p.Dir, "rules-diff.md")); err == nil {
+		if err := add("bountykit/rules-diff.md", b); err != nil {
+			return Result{}, err
+		}
+	}
 
 	// The surface map and the ranked queue are the agent's entry point.
 	for _, name := range []string{"map.md", "map.json", "next.md", "next.json"} {
@@ -337,6 +342,19 @@ func brief(p *workspace.Program, now time.Time, opts Options) string {
 		b.WriteString("## Boundaries (read first)\n\n")
 		b.WriteString("No structured boundaries were extracted. Treat this as unknown, not as permission. ")
 		b.WriteString("Read `policy.md` and `boundaries.md` before any request.\n\n")
+	}
+
+	if raw, err := os.ReadFile(filepath.Join(p.Dir, "rules-diff.md")); err == nil {
+		text := strings.TrimSpace(string(raw))
+		if i := strings.Index(text, "\n"); i >= 0 {
+			text = strings.TrimSpace(text[i:])
+		}
+		if len(text) > 2500 {
+			text = text[:2500] + "\n\n… truncated, see `bountykit/rules-diff.md`\n"
+		}
+		b.WriteString("## Rule changes\n\n")
+		b.WriteString(text)
+		b.WriteString("\n\n")
 	}
 
 	b.WriteString("## Scope (authoritative)\n\n")

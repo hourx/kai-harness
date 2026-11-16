@@ -36,6 +36,7 @@ Go 1.21+. No cgo, no third-party modules.
 bountykit intake 'https://hackerone.com/temu?type=team' --dry-run   # scorecard only
 bountykit intake temu                              # create workspace + scope + policy
 bountykit boundaries temu                          # aturan, batasan, out-of-scope (verbatim)
+bountykit rules-diff temu                          # aturan/scope berubah sejak intake terakhir?
 
 # 2. fill in / verify scope (intake writes what the platform publishes)
 $EDITOR data/temu/scope.txt data/temu/out-of-scope.txt
@@ -117,6 +118,19 @@ excerpts. `bountykit boundaries <program>` prints it; it is also in the ZIP and
 summarised at the top of `BRIEF.md`. Anything not published is rendered as
 "unknown / not stated", never as "allowed".
 
+Every intake is snapshotted under `intakes/<ts>/`. `bountykit rules-diff <program>`
+compares it with the previous one and flags new/removed scope rules, new or
+removed assets and candidates, reward changes, program state changes and edits
+to the policy text. A program that silently removes `api.example.com` from
+scope produces "Removed scope rules" — yesterday's test target is not
+automatically safe today. The diff is also summarised in `BRIEF.md`.
+
+`map` and `next` now consume Phase 0 non-web assets too: source repositories,
+contract addresses, API paths, app IDs and AI/model surfaces get their own
+hypotheses with class-specific probes. Verbatim boundaries are carried into
+those probes — a program that forbids mainnet testing says so in the first
+probe. Out-of-scope assets are never queued.
+
 ## Scope semantics
 
 Identical to `Kairos/scripts/scope_check.py`:
@@ -139,6 +153,8 @@ data/<program>/          state (gitignored)
   scope.txt  out-of-scope.txt  program.md  policy.md  boundaries.md
   intake.json            structured Phase 0 data + scorecard + boundaries
   audit.log
+  intakes/<ts>/          intake + boundaries + policy snapshots
+  rules-diff.json  rules-diff.md   rule changes vs previous intake
   session.json           cookies + headers, mode 0600, never packed by default
   assets.json            hosts, endpoints, JS hashes + first_seen/last_seen
   diff.json  diff.md     delta vs previous snapshot
@@ -155,6 +171,7 @@ dist/<program>_<ts>.zip  handoff archive
     bountykit/
       MANIFEST.json      files + sha256
       intake.json        Phase 0 data + boundaries
+      rules-diff.md      rule changes
       diff.md            what is new
       map.md  map.json   surface map
       next.md  next.json ranked queue
@@ -173,7 +190,8 @@ dist/<program>_<ts>.zip  handoff archive
 | v0.4 | `intake` (Phase 0), exact-host recon — done |
 | v0.5 | multi-source intake (H1, Cantina, Immunefi, GitBook, self-hosted) |
 | v0.6 | `boundaries` — structured limits + verbatim out-of-scope |
-| v0.7 | `report`, full adapters |
+| v0.7 | rule diff across intakes + non-web assets in `map`/`next` |
+| v0.8 | `report`, full adapters |
 
 ## Rules
 

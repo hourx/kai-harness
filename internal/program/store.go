@@ -86,6 +86,10 @@ func Apply(p *workspace.Program, in *Intake) error {
 		return err
 	}
 
+	if _, err := SnapshotAndDiff(p.Dir, in); err != nil {
+		return err
+	}
+
 	p.Meta.Notes = fmt.Sprintf("intake from %s (%s)", in.URL, in.FetchedAt.Format("2006-01-02"))
 	return p.SaveMeta()
 }

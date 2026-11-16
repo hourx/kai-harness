@@ -34,6 +34,12 @@ var probes = map[string]string{
 	"graphql":              "Send introspection, then batch the same query with two different identities.",
 	"access-control":       "Send it with no cookie, then with a low-privilege cookie. Try `/`, `//`, `/./`, `%2e` and `x..;/` path variants.",
 	"surface-review":       "Fingerprint the host, pick one flow, then read the JavaScript that drives it.",
+	"supply-chain":         "Read the CI workflows and publish tokens. Look for pull_request_target, dependency confusion, unsigned artifacts and leaked package credentials.",
+	"smart-contract":       "Read verified source and past audits; build a Foundry fork PoC. Never test against live mainnet if the policy forbids it.",
+	"api-surface":          "Map each endpoint's auth and object references; compare responses with and without a session, then across two identities.",
+	"agentic-ai":           "Trace the trust boundary: tool output → model → action. Prove an injected instruction reaches a real side effect on another user or the control plane.",
+	"mobile-app":           "Inspect the app's API calls and local storage; check whether client-side controls are re-enforced on the server.",
+	"infra-or-other":       "Read the policy's impact examples for this asset class, then pick the one with the most concrete payout path.",
 }
 
 var classLabel = map[string]string{
@@ -238,6 +244,65 @@ func looseRisky(name string) bool {
 		}
 	}
 	return false
+}
+
+// AddNonWeb appends Phase 0 non-host targets to the ranked queue. It never
+// touches a target: it only turns published scope into a test hypothesis.
+func AddNonWeb(p *Plan, assets []NonWebAsset, constraints []string) {
+	for _, a := range assets {
+		class, score := nonWebClass(a)
+		why := []string{"in-scope " + strings.ToLower(a.Type) + " asset from Phase 0 intake"}
+		if a.Detail != "" {
+			why = append(why, a.Detail)
+		}
+		if a.Unverified {
+			score -= 30
+			why = append(why, "candidate from page text — verify against the policy first")
+		}
+		probe := probes[class]
+		for _, c := range constraints {
+			low := strings.ToLower(c)
+			if strings.Contains(low, "mainnet") && strings.Contains(low, "do not") {
+				probe = "Use testnet or a local fork only — mainnet testing is forbidden. " + probe
+				break
+			}
+		}
+		p.Items = append(p.Items, Hypothesis{
+			Target: a.Identifier,
+			Class:  class,
+			Score:  score,
+			Why:    why,
+			Probe:  probe,
+		})
+	}
+	sort.Slice(p.Items, func(i, j int) bool {
+		if p.Items[i].Score != p.Items[j].Score {
+			return p.Items[i].Score > p.Items[j].Score
+		}
+		return p.Items[i].Target < p.Items[j].Target
+	})
+	if len(p.Items) > 150 {
+		p.Items = p.Items[:150]
+	}
+}
+
+func nonWebClass(a NonWebAsset) (string, int) {
+	t := strings.ToUpper(a.Type)
+	id := strings.ToLower(a.Identifier)
+	switch {
+	case strings.Contains(t, "CONTRACT") || strings.HasPrefix(id, "0x"):
+		return "smart-contract", 75
+	case strings.Contains(t, "SOURCE") || strings.Contains(id, "github.com"):
+		return "supply-chain", 70
+	case strings.Contains(t, "API") || strings.Contains(a.Detail, "path-restricted"):
+		return "api-surface", 65
+	case strings.Contains(t, "AI") || strings.Contains(id, "model") || strings.Contains(id, "agent"):
+		return "agentic-ai", 70
+	case strings.Contains(t, "PLAY") || strings.Contains(t, "STORE") || strings.Contains(t, "TESTFLIGHT"):
+		return "mobile-app", 60
+	default:
+		return "infra-or-other", 40
+	}
 }
 
 // Markdown renders the queue.

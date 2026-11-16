@@ -194,6 +194,53 @@ func TestClassDoesNotMatchSubstrings(t *testing.T) {
 	}
 }
 
+func TestAddNonWebRespectsConstraints(t *testing.T) {
+	p := &Plan{Program: "p"}
+	AddNonWeb(p, []NonWebAsset{
+		{Identifier: "0xdeadbeef", Type: "CONTRACT"},
+		{Identifier: "github.com/org/repo", Type: "SOURCE_CODE", Unverified: true},
+		{Identifier: "api.example.com/v1/users", Type: "API", Detail: "path-restricted"},
+	}, []string{"do not send test traffic to mainnet — use local forks"})
+
+	if len(p.Items) != 3 {
+		t.Fatalf("items = %v", p.Items)
+	}
+	byTarget := map[string]Hypothesis{}
+	for _, h := range p.Items {
+		byTarget[h.Target] = h
+	}
+	contract := byTarget["0xdeadbeef"]
+	if contract.Class != "smart-contract" || contract.Score != 75 {
+		t.Errorf("contract = %+v", contract)
+	}
+	if !strings.Contains(contract.Probe, "local fork") {
+		t.Errorf("mainnet constraint not propagated: %s", contract.Probe)
+	}
+	repo := byTarget["github.com/org/repo"]
+	if repo.Score != 40 || !strings.Contains(strings.Join(repo.Why, " "), "verify") {
+		t.Errorf("unverified repo should be discounted and flagged: %+v", repo)
+	}
+	if byTarget["api.example.com/v1/users"].Class != "api-surface" {
+		t.Errorf("api class = %q", byTarget["api.example.com/v1/users"].Class)
+	}
+	for i := 1; i < len(p.Items); i++ {
+		if p.Items[i-1].Score < p.Items[i].Score {
+			t.Fatal("AddNonWeb must keep the queue sorted")
+		}
+	}
+}
+
+func TestBuildWithNonWebRecordsAssets(t *testing.T) {
+	assets := []NonWebAsset{{Identifier: "com.example.app", Type: "GOOGLE_PLAY_APP_ID"}}
+	m := BuildWithNonWeb("p", map[string][]string{}, assets, time.Now())
+	if len(m.NonWeb) != 1 || m.Stats.Endpoints != 0 {
+		t.Errorf("map = %+v", m)
+	}
+	if !strings.Contains(m.Markdown(), "Non-web assets") {
+		t.Error("map markdown should list non-web assets")
+	}
+}
+
 func TestBuildPlanEmpty(t *testing.T) {
 	plan := BuildPlan("p", Build("p", map[string][]string{}, time.Now()), map[string][]string{}, nil, nil, time.Now())
 	if len(plan.Items) != 0 {
