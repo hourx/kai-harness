@@ -145,6 +145,11 @@ dekat heading "in scope" masuk `candidate_assets`, **tidak** langsung ke
 `scope.txt`. Operator memverifikasi lalu memakai `--trust-scope` untuk
 mempromosikannya; ini tercatat di comment `scope.txt`.
 
+Sumber non-H1 juga mengikuti link dokumen relevan dari halaman utama (testnet,
+reward, submission, security, faucet) di domain yang sama, maksimal 8 halaman.
+Teks gabungannya dipakai untuk semua ekstraksi. Host yang ditemukan di halaman
+referensi tetap berstatus kandidat sampai diverifikasi operator.
+
 Data yang diekstrak dari teks: reward per severity (termasuk `<1M USDC`),
 "Maximum Bounty/Max payout", jumlah findings/paid reports, constraint testing
 (no-mainnet, PoC, KYC, disclosure), dan aset yang disebut di bagian scope.
@@ -323,6 +328,7 @@ bountykit analyze <program> [--clone] [--refresh]        # repo + kontrak in-sco
 bountykit rules-diff <program>                   # delta aturan antar-intake
 bountykit boundaries <program>                   # aturan + batasan + verbatim
 bountykit intake <url> [--name slug] [--dry-run] [--force] [--trust-scope]
+                      [--max-links N] [--no-follow]
 ```
 
 v0.5:
@@ -348,6 +354,7 @@ bountykit report <program>
 11. Setiap intake di-snapshot. Perubahan scope atau policy wajib muncul di `rules-diff.md` dan `BRIEF.md`.
 12. Aset non-web yang out-of-scope tidak pernah masuk antrian `next`.
 13. `analyze --clone` hanya menyentuh repo yang tercantum di scope; clone disimpan di `data/` dan tidak pernah di-pack.
+14. `intake` hanya mengikuti link relevan di domain yang sama, maksimal `--max-links` halaman (default 8). Referensi tambahan tetap menghasilkan kandidat yang belum diverifikasi.
 
 ---
 

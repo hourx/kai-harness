@@ -34,7 +34,7 @@ Commands:
   init    <program> [--platform P] [--url U] [--verdict V] [--domain d,d]
                                                              create workspace
   intake  <url|handle> [--name slug] [--dry-run] [--force] [--trust-scope]
-                                                             Phase 0: read program
+                    [--max-links N] [--no-follow]                Phase 0: read program
   boundaries <program>                                      print scope limits & rules
   analyze   <program> [--clone] [--refresh]                 inspect in-scope repos/contracts
   rules-diff <program>                                      what changed since last intake
@@ -139,13 +139,15 @@ func split(args []string, valueFlags map[string]bool) (pos, rest []string) {
 }
 
 func cmdIntake(args []string) int {
-	pos, rest := split(args, map[string]bool{"name": true})
+	pos, rest := split(args, map[string]bool{"name": true, "max-links": true})
 	fs := flag.NewFlagSet("intake", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
 	nameFlag := fs.String("name", "", "workspace slug (default: HackerOne handle)")
 	dryRun := fs.Bool("dry-run", false, "print the scorecard without creating a workspace")
 	force := fs.Bool("force", false, "overwrite an existing workspace's scope files")
 	trustScope := fs.Bool("trust-scope", false, "promote hosts found in page text into scope.txt (verify first)")
+	maxLinks := fs.Int("max-links", 8, "follow up to N relevant documentation links (0 = off)")
+	noFollow := fs.Bool("no-follow", false, "do not follow reference links")
 	if err := fs.Parse(rest); err != nil {
 		return 2
 	}
@@ -167,7 +169,11 @@ func cmdIntake(args []string) int {
 		}
 		in, err = program.FetchHackerOne(context.Background(), client, handle)
 	} else {
-		in, err = program.FetchWeb(context.Background(), client, pos[0])
+		n := *maxLinks
+		if *noFollow {
+			n = 0
+		}
+		in, err = program.FetchWeb(context.Background(), client, pos[0], program.FetchOptions{Follow: n > 0, MaxLinks: n})
 	}
 	if err != nil {
 		return fail(err)

@@ -106,7 +106,12 @@ func htmlToText(b []byte) string {
 //
 // It never guesses scope into scope.txt: candidates extracted from prose are
 // returned separately and only promoted when the operator passes --trust-scope.
-func FetchWeb(ctx context.Context, c *netx.Client, raw string) (*Intake, error) {
+func FetchWeb(ctx context.Context, c *netx.Client, raw string, options ...FetchOptions) (*Intake, error) {
+	fopt := FetchOptions{}
+	if len(options) > 0 {
+		fopt = options[0]
+	}
+	fopt = fopt.defaults()
 	u, err := parseURL(raw)
 	if err != nil {
 		return nil, err
@@ -149,6 +154,19 @@ func FetchWeb(ctx context.Context, c *netx.Client, raw string) (*Intake, error) 
 		return nil, fmt.Errorf("%s produced too little readable text (%d bytes)", fetchURL, len(policy))
 	}
 
+	var refs []Reference
+	var refCandidates []Candidate
+	if fopt.Follow {
+		var linked []string
+		refs, linked, refCandidates = followReferences(ctx, c, u, policy, fopt, platform == "gitbook")
+		for _, t := range linked {
+			policy += "\n\n" + t
+		}
+		if len(policy) > 320_000 {
+			policy = policy[:320_000] + "\n\n[… linked documentation truncated; see the source pages]"
+		}
+	}
+
 	name := pageTitle(body, policy)
 	if name == "" || strings.EqualFold(name, "program") || strings.EqualFold(name, "bug bounty program") {
 		// A generic page title ("Bug bounty program") is less useful than
@@ -173,6 +191,7 @@ func FetchWeb(ctx context.Context, c *netx.Client, raw string) (*Intake, error) 
 		OffersBounty: true,
 		Currency:     "USD",
 		Policy:       policy,
+		References:   refs,
 		FetchedAt:    time.Now().UTC(),
 	}
 	if platform == "immunefi" && strings.Contains(policy, "Paused") {
@@ -182,6 +201,8 @@ func FetchWeb(ctx context.Context, c *netx.Client, raw string) (*Intake, error) 
 	in.Resolved, in.Reports90d, in.ReportsKnown = extractCounters(policy)
 	in.Assets = extractContractAssets(policy)
 	in.Candidates = append(extractCandidates(policy), extractSystems(policy)...)
+	in.Candidates = append(in.Candidates, refCandidates...)
+	in.Candidates = uniqueCandidates(in.Candidates)
 	in.Constraints = extractConstraints(policy)
 	in.Boundaries = ExtractBoundaries(policy, in.Confidence)
 	in.PolicyHash = hashPolicy(policy)
@@ -192,7 +213,8 @@ func FetchWeb(ctx context.Context, c *netx.Client, raw string) (*Intake, error) 
 var noiseHosts = map[string]bool{
 	"immunefi.com": true, "cantina.xyz": true, "hackerone.com": true,
 	"gitbook.io": true, "meta.com": true, "ethereum.org": true,
-	"twitter.com": true, "x.com": true, "discord.gg": true,
+	"twitter.com": true, "x.com": true, "discord.gg": true, "discord.com": true,
+	"t.me": true, "telegram.me": true, "telegram.org": true,
 	"etherscan.io": true, "arbiscan.io": true, "example.com": true,
 	"docs.github.com": true,
 }
@@ -234,8 +256,34 @@ func extractSystems(policy string) []Candidate {
 	return out
 }
 
+func uniqueCandidates(in []Candidate) []Candidate {
+	seen := map[string]bool{}
+	out := make([]Candidate, 0, len(in))
+	for _, c := range in {
+		key := c.Type + ":" + strings.ToLower(c.Identifier)
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		out = append(out, c)
+	}
+	return out
+}
+
 // looksLikeFileHost rejects "Reactor.sol" and similar source-file names that
 // the bare-domain regex cannot distinguish from a hostname.
+func isNoiseHost(host string) bool {
+	if noiseHosts[host] {
+		return true
+	}
+	for _, suffix := range []string{".gitbook.io", ".discord.com", ".googleusercontent.com"} {
+		if strings.HasSuffix(host, suffix) {
+			return true
+		}
+	}
+	return false
+}
+
 func looksLikeFileHost(host string) bool {
 	i := strings.LastIndex(host, ".")
 	return i > 0 && fileExt[strings.ToLower(host[i+1:])]
@@ -318,7 +366,7 @@ func extractCandidates(policy string) []Candidate {
 			continue
 		}
 		host := strings.ToLower(u.Hostname())
-		if noiseHosts[host] || strings.HasSuffix(host, ".etherscan.io") {
+		if isNoiseHost(host) || strings.HasSuffix(host, ".etherscan.io") {
 			continue
 		}
 		typ := "URL"
@@ -336,7 +384,7 @@ func extractCandidates(policy string) []Candidate {
 
 	for _, raw := range domainRE.FindAllString(text, -1) {
 		host := strings.ToLower(strings.TrimSuffix(raw, "."))
-		if noiseHosts[host] || host == "github.com" || looksLikeFileHost(host) || len(host) < 5 ||
+		if isNoiseHost(host) || host == "github.com" || looksLikeFileHost(host) || len(host) < 5 ||
 			strings.HasPrefix(host, "docs.") || emailDomains[host] {
 			continue
 		}

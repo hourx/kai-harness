@@ -33,6 +33,14 @@ bountykit intake 'https://hackerone.com/temu?type=team'
 Terbuat `data/temu/` berisi `scope.txt`, `out-of-scope.txt`, `policy.md`,
 `boundaries.md`, `program.md`, `intake.json`.
 
+Secara default `intake` juga **mengikuti link dokumentasi yang relevan** dari
+halaman utama (maksimal 8 halaman, domain yang sama saja): guide testnet,
+halaman reward, cara submit, dan sejenisnya. Semua teksnya digabung sebelum
+aturan diekstrak, jadi email submission, host testnet, dan aturan tambahan
+masuk dalam satu kali jalan. Daftar halaman yang dibaca ada di `intake.json`
+dan di scorecard. Matikan dengan `--no-follow`, atau ubah batasnya dengan
+`--max-links 12`.
+
 ### 2. Baca batasan sebelum apa pun
 
 ```bash
@@ -165,7 +173,7 @@ mandiri lain.
 | Perintah | Fungsi |
 |---|---|
 | `init <program> [--platform P] [--url U] [--domain d,d]` | workspace kosong manual |
-| `intake <url\|handle> [--name slug] [--dry-run] [--force] [--trust-scope]` | Phase 0 dari halaman program |
+| `intake <url\|handle> [--name slug] [--dry-run] [--force] [--trust-scope] [--max-links N] [--no-follow]` | Phase 0 dari halaman program + referensinya |
 | `boundaries <program>` | aturan, batasan, kutipan verbatim |
 | `rules-diff <program>` | perubahan aturan vs intake sebelumnya |
 | `scope <program> <host\|cidr>` | gate IN/OUT (exit 0/1/2) |
@@ -270,5 +278,5 @@ Go 1.21+. Tanpa cgo, tanpa dependency eksternal.
 |---|---|
 | v0.1–v0.3 | scope gate, pack, recon, diff, session, map, next |
 | v0.4–v0.6 | intake H1 + multi-sumber, boundaries verbatim |
-| v0.7–v0.8 | rule diff, aset non-web, analisis repo/kontrak |
+| v0.7–v0.8 | rule diff, aset non-web, analisis repo/kontrak, referensi dokumentasi |
 | v0.9 | `report`, adapter penuh |

@@ -98,19 +98,27 @@ func ExtractBoundaries(policy, confidence string) Boundaries {
 	}
 	sort.Strings(b.SubmissionContact)
 
-	for _, h := range headerRE.FindAllString(policy, -1) {
-		name := strings.ToUpper(h)
-		if name == "HTTP" || name == "HTML" || name == "HTTPS" {
+	for _, line := range strings.Split(policy, "\n") {
+		low := strings.ToLower(line)
+		if !strings.Contains(low, "header") && !strings.Contains(low, "research") && !strings.Contains(low, "security") {
+			// GitBook image URLs contain things like "gitbook-x-prod";
+			// without a header context they are not research headers.
 			continue
 		}
-		found := false
-		for _, existing := range b.RequiredHeaders {
-			if existing == name {
-				found = true
+		for _, h := range headerRE.FindAllString(line, -1) {
+			name := strings.ToUpper(h)
+			if name == "HTTP" || name == "HTML" || name == "HTTPS" {
+				continue
 			}
-		}
-		if !found {
-			b.RequiredHeaders = append(b.RequiredHeaders, name)
+			found := false
+			for _, existing := range b.RequiredHeaders {
+				if existing == name {
+					found = true
+				}
+			}
+			if !found {
+				b.RequiredHeaders = append(b.RequiredHeaders, name)
+			}
 		}
 	}
 	sort.Strings(b.RequiredHeaders)

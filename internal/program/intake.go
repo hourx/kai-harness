@@ -52,6 +52,14 @@ type Candidate struct {
 	Section    string `json:"section,omitempty"`
 }
 
+// Reference is another page followed from the main program page.
+type Reference struct {
+	URL    string `json:"url"`
+	Title  string `json:"title,omitempty"`
+	Why    string `json:"why,omitempty"`
+	Status string `json:"status,omitempty"`
+}
+
 // Intake is everything Phase 0 can learn without logging in.
 type Intake struct {
 	Platform      string                  `json:"platform"`
@@ -78,6 +86,7 @@ type Intake struct {
 	SeverityStats map[string]SeverityStat `json:"severity_stats,omitempty"`
 	Assets        []Asset                 `json:"assets,omitempty"`
 	Candidates    []Candidate             `json:"candidate_assets,omitempty"`
+	References    []Reference             `json:"references,omitempty"`
 	Constraints   []string                `json:"constraints,omitempty"`
 	Boundaries    Boundaries              `json:"boundaries,omitempty"`
 	TrustScope    bool                    `json:"trust_scope,omitempty"`
@@ -566,6 +575,14 @@ func (in *Intake) Markdown() string {
 			fmt.Fprintf(&b, "- %s\n", c)
 		}
 		b.WriteString("\n")
+	}
+
+	if len(in.References) > 0 {
+		b.WriteString("## Documentation read (linked from the main page)\n\n")
+		for _, r := range in.References {
+			fmt.Fprintf(&b, "- `%s` — %s (%s)\n", r.URL, dash(r.Title), r.Status)
+		}
+		b.WriteString("\nThese pages are folded into the policy text and the rules above.\n\n")
 	}
 
 	b.WriteString("## Read before testing\n\n")
