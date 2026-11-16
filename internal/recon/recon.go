@@ -339,12 +339,28 @@ func Run(ctx context.Context, p *workspace.Program, opts Options) (Summary, erro
 		e.Params = Uniq(e.Params, params)
 		e.Sources = Uniq(e.Sources, []string{"url"})
 	}
-	// Drop artifacts left by older runs (numeric-only paths, template junk)
-	// so a tool fix actually cleans the state instead of accumulating noise.
-	for path := range store.Endpoints {
-		if !looksLikeEndpoint(path) {
+	// Merge old placeholder spellings into the normalized form and drop
+	// artifacts from earlier runs, so fixes actually clean the state.
+	for path, old := range store.Endpoints {
+		np := normalizePath(path)
+		if !looksLikeEndpoint(np) {
 			delete(store.Endpoints, path)
+			continue
 		}
+		if np == path {
+			continue
+		}
+		dst := store.Endpoints[np]
+		if dst == nil {
+			dst = &EndpointRecord{Path: np, FirstSeen: old.FirstSeen}
+			store.Endpoints[np] = dst
+		}
+		dst.Params = Uniq(dst.Params, old.Params)
+		dst.Sources = Uniq(dst.Sources, old.Sources)
+		if old.LastSeen.After(dst.LastSeen) {
+			dst.LastSeen = old.LastSeen
+		}
+		delete(store.Endpoints, path)
 	}
 	for _, b := range bundles {
 		store.Bundle(b.URL, b.SHA, b.Bytes, now)

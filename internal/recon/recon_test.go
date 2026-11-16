@@ -11,6 +11,21 @@ import (
 	"github.com/hourx/bountykit/internal/netx"
 )
 
+func TestNormalizePath(t *testing.T) {
+	cases := map[string]string{
+		"/api/v1/apps/${this.appId}/smart_wallets": "/api/v1/apps/{id}/smart_wallets",
+		"/api/v1/apps/:app_id/smart_wallets":       "/api/v1/apps/{id}/smart_wallets",
+		"/explorer/tx/${e.txHash}":                 "/explorer/tx/{id}",
+		"/charting_library/v${bu}":                 "/charting_library/v{id}",
+		"/api/v1/users/42":                         "/api/v1/users/42",
+	}
+	for raw, want := range cases {
+		if got := normalizePath(raw); got != want {
+			t.Errorf("normalizePath(%q) = %q, want %q", raw, got, want)
+		}
+	}
+}
+
 func TestIsJSURL(t *testing.T) {
 	cases := map[string]bool{
 		"https://testnet.ticko.xyz/assets/app.js":     true,

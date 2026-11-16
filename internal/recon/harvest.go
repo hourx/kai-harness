@@ -15,9 +15,11 @@ import (
 
 var (
 	// Quoted absolute paths inside JS bundles.
-	jsPathRE  = regexp.MustCompile("[\"'`](/[A-Za-z0-9_\\-./{}:$]{2,120})[\"'`]")
-	paramRE   = regexp.MustCompile(`[?&]([A-Za-z_][A-Za-z0-9_-]{0,40})=`)
-	staticExt = map[string]bool{
+	jsPathRE      = regexp.MustCompile("[\"'`](/[A-Za-z0-9_\\-./{}:$]{2,120})[\"'`]")
+	paramRE       = regexp.MustCompile(`[?&]([A-Za-z_][A-Za-z0-9_-]{0,40})=`)
+	colonParamRE  = regexp.MustCompile(`:[A-Za-z_][A-Za-z0-9_]*`)
+	dollarParamRE = regexp.MustCompile(`\$\{[^}]{1,40}\}`)
+	staticExt     = map[string]bool{
 		".js": true, ".png": true, ".jpg": true, ".jpeg": true, ".gif": true, ".svg": true,
 		".ico": true, ".css": true, ".woff": true, ".woff2": true, ".ttf": true,
 		".eot": true, ".map": true, ".mp4": true, ".webp": true, ".avif": true,
@@ -57,6 +59,15 @@ func PathOf(rawurl string) (string, []string) {
 func isJSURL(raw string) bool {
 	u, err := url.Parse(raw)
 	return err == nil && u.Path != "" && strings.HasSuffix(strings.ToLower(u.Path), ".js")
+}
+
+// normalizePath collapses the many placeholder styles found in JS bundles
+// (":id", "${id}", "${this.appId}") into one "{id}" form so the same endpoint
+// does not produce several duplicate hypotheses.
+func normalizePath(path string) string {
+	p := dollarParamRE.ReplaceAllString(path, "{id}")
+	p = colonParamRE.ReplaceAllString(p, "{id}")
+	return p
 }
 
 // looksLikeEndpoint rejects strings that JS regexes commonly mistake for
@@ -175,7 +186,11 @@ func ExtractPaths(urls []string, bundles []Bundle) map[string][]string {
 	found := map[string][]string{}
 	absorb := func(raw string) {
 		path, params := PathOf(raw)
-		if path == "" || !looksLikeEndpoint(path) {
+		if path == "" {
+			return
+		}
+		path = normalizePath(path)
+		if !looksLikeEndpoint(path) {
 			return
 		}
 		found[path] = Uniq(found[path], params)

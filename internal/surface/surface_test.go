@@ -57,6 +57,9 @@ func TestObjectRef(t *testing.T) {
 		{"/api/orders/3f2504e0-4f89-11d3-9a0c-0305e82c3301", "uuid", true},
 		{"/files/deadbeefdeadbeefdeadbeef", "hex", true},
 		{"/api/users/me", "", false},
+		{"/api/users/:user_id", "param", true},
+		{"/api/users/{id}", "template", true},
+		{"/api/users/${e}", "template", true},
 		{"/412", "", false},
 		{"/v2/reports", "", false},
 	}

@@ -299,6 +299,10 @@ func ObjectRef(path string) (Ref, bool) {
 			return Ref{Endpoint: path, Segment: s, Kind: "uuid"}, true
 		case hexRE.MatchString(low):
 			return Ref{Endpoint: path, Segment: s, Kind: "hex"}, true
+		case len(low) > 1 && low[0] == ':' && (low[1] >= 'a' && low[1] <= 'z' || low[1] == '{'):
+			return Ref{Endpoint: path, Segment: s, Kind: "param"}, true
+		case low == "{id}" || strings.HasPrefix(low, "${") && strings.HasSuffix(low, "}"):
+			return Ref{Endpoint: path, Segment: s, Kind: "template"}, true
 		}
 	}
 	return Ref{}, false
