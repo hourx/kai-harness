@@ -484,6 +484,7 @@ func buildSurface(p *workspace.Program) (*surface.Plan, error) {
 	d, _ := recon.LoadDiff(p.Dir)
 	plan := surface.BuildPlan(p.Name, m, endpoints, d, store.Hosts, now)
 	surface.AddNonWeb(plan, nonWeb, constraints)
+	surface.ApplyConstraints(plan, constraints)
 	if err := os.WriteFile(filepath.Join(p.Dir, "next.md"), []byte(plan.Markdown()), 0o600); err != nil {
 		return nil, err
 	}

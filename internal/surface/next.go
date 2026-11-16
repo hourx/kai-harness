@@ -341,6 +341,25 @@ func nonWebClass(a NonWebAsset) (string, int) {
 	}
 }
 
+// ApplyConstraints attaches the program's hard boundary to every probe.
+// BRIEF.md already leads with it; this makes the reminder survive even when
+// the agent opens next.md directly.
+func ApplyConstraints(p *Plan, constraints []string) {
+	for i := range p.Items {
+		probe := strings.ToLower(p.Items[i].Probe)
+		if strings.Contains(probe, "mainnet") {
+			continue
+		}
+		for _, c := range constraints {
+			low := strings.ToLower(c)
+			if strings.Contains(low, "mainnet") && (strings.Contains(low, "do not") || strings.Contains(low, "forbidden")) {
+				p.Items[i].Probe = "Boundary: no mainnet/live testing — use testnet or a local fork. " + p.Items[i].Probe
+				break
+			}
+		}
+	}
+}
+
 // Markdown renders the queue.
 func (p *Plan) Markdown() string {
 	var b strings.Builder

@@ -267,6 +267,20 @@ func TestSensitiveIDOROutranksGenericIDOR(t *testing.T) {
 	}
 }
 
+func TestApplyConstraintsToEveryProbe(t *testing.T) {
+	p := &Plan{Items: []Hypothesis{
+		{Target: "/api/v1/users/{id}", Class: "IDOR/BOLA", Score: 100, Probe: "Fetch as A then B."},
+		{Target: "github.com/org/repo", Class: "supply-chain", Score: 70, Probe: "Use testnet or a local fork only — mainnet testing is forbidden. Read CI."},
+	}}
+	ApplyConstraints(p, []string{"Do NOT test on mainnet/production — use testnet or local forks"})
+	if !strings.Contains(p.Items[0].Probe, "Boundary:") {
+		t.Errorf("web probe missing boundary: %s", p.Items[0].Probe)
+	}
+	if strings.Count(p.Items[1].Probe, "mainnet") != 1 {
+		t.Errorf("duplicate boundary prefix: %s", p.Items[1].Probe)
+	}
+}
+
 func TestBuildPlanEmpty(t *testing.T) {
 	plan := BuildPlan("p", Build("p", map[string][]string{}, time.Now()), map[string][]string{}, nil, nil, time.Now())
 	if len(plan.Items) != 0 {
