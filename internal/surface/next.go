@@ -117,6 +117,9 @@ func BuildPlan(program string, m *Map, endpoints map[string][]string, d *recon.D
 			// object another account might be able to fetch.
 			score += 50
 		}
+		bonus, sensitive := sensitivity(path)
+		score += bonus
+		why = append(why, sensitive...)
 		if newEndpoint[path] {
 			score += 100
 			why = append(why, "endpoint is new since the last run")
@@ -209,6 +212,32 @@ func hostWordMatches(host string) []string {
 		}
 	}
 	return out
+}
+
+// sensitivity rewards paths where an IDOR would actually pay: key material,
+// recovery, exports, balances and transfers outrank a generic app lookup.
+// Without this, every "{id}" route ties at the same score and the queue stops
+// being a priority list.
+func sensitivity(path string) (int, []string) {
+	low := strings.ToLower(path)
+	rules := []struct {
+		word  string
+		bonus int
+	}{
+		{"key_material", 30}, {"recovery", 25}, {"secret", 25}, {"credential", 25},
+		{"export", 20}, {"admin", 20}, {"withdraw", 20},
+		{"token", 15}, {"transfer", 15}, {"balance", 15}, {"payment", 15}, {"rpc", 15},
+		{"invoice", 10}, {"session", 10}, {"auth", 10}, {"mfa", 10},
+	}
+	total := 0
+	var why []string
+	for _, r := range rules {
+		if strings.Contains(low, r.word) {
+			total += r.bonus
+			why = append(why, "sensitive path includes `"+r.word+"`")
+		}
+	}
+	return total, why
 }
 
 // classScore ranks the business area a hypothesis belongs to.

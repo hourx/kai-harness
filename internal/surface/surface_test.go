@@ -245,6 +245,28 @@ func TestBuildWithNonWebRecordsAssets(t *testing.T) {
 	}
 }
 
+func TestSensitiveIDOROutranksGenericIDOR(t *testing.T) {
+	endpoints := map[string][]string{
+		"/api/v1/apps/{id}": {},
+		"/api/v1/embedded_wallets/{id}/recovery/key_material": {},
+	}
+	m := Build("p", endpoints, time.Now())
+	plan := BuildPlan("p", m, endpoints, nil, nil, time.Now())
+	if len(plan.Items) != 2 {
+		t.Fatalf("items = %+v", plan.Items)
+	}
+	top := plan.Items[0]
+	if !strings.Contains(top.Target, "key_material") {
+		t.Errorf("top = %s (score %d), want the recovery/key_material route", top.Target, top.Score)
+	}
+	if top.Score <= plan.Items[1].Score {
+		t.Errorf("scores tied or inverted: %d vs %d", top.Score, plan.Items[1].Score)
+	}
+	if !strings.Contains(strings.Join(top.Why, " "), "key_material") {
+		t.Errorf("why should name the sensitive token: %v", top.Why)
+	}
+}
+
 func TestBuildPlanEmpty(t *testing.T) {
 	plan := BuildPlan("p", Build("p", map[string][]string{}, time.Now()), map[string][]string{}, nil, nil, time.Now())
 	if len(plan.Items) != 0 {
