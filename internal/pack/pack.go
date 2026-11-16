@@ -315,6 +315,8 @@ func brief(p *workspace.Program, now time.Time, opts Options) string {
 			KYCRequired        bool     `json:"kyc_required"`
 			DepositRequired    bool     `json:"deposit_required"`
 			RequiredHeaders    []string `json:"required_headers"`
+			SubmissionChannel  string   `json:"submission_channel"`
+			SubmissionContact  []string `json:"submission_contact"`
 			Notes              []string `json:"notes"`
 		} `json:"boundaries"`
 	}
@@ -340,6 +342,12 @@ func brief(p *workspace.Program, now time.Time, opts Options) string {
 		fmt.Fprintf(&b, "- PoC: %s · KYC: %s · deposit: %s\n", yesNo(pi.Boundaries.PoCRequired), yesNo(pi.Boundaries.KYCRequired), yesNo(pi.Boundaries.DepositRequired))
 		if len(bd.RequiredHeaders) > 0 {
 			fmt.Fprintf(&b, "- required headers: `%s`\n", strings.Join(bd.RequiredHeaders, "`, `"))
+		}
+		if bd.SubmissionChannel != "" {
+			fmt.Fprintf(&b, "- submit via: **%s**\n", bd.SubmissionChannel)
+		}
+		if len(bd.SubmissionContact) > 0 {
+			fmt.Fprintf(&b, "- published contacts: `%s` (not necessarily the report channel)\n", strings.Join(bd.SubmissionContact, "`, `"))
 		}
 		for i, n := range bd.Notes {
 			if i >= 4 {
