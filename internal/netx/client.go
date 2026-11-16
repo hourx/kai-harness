@@ -54,6 +54,7 @@ func (c *Client) SetSession(s Session) { c.sess = &s }
 // false to stop following. Pass nil to follow redirects unconditionally.
 func New(ua string, rps int, allow func(*url.URL) bool) *Client {
 	tr := &http.Transport{
+		Proxy:               http.ProxyFromEnvironment,
 		MaxIdleConns:        100,
 		MaxIdleConnsPerHost: 2,
 		IdleConnTimeout:     30 * time.Second,
