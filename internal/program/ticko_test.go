@@ -23,6 +23,31 @@ Report to security@ticko.market. Keep the report confidential until authorized.
 | **Others** | **50 USDT** |
 `
 
+func TestHackerOneSubmissionGoesThroughPlatform(t *testing.T) {
+	in := &Intake{
+		Platform: "h1",
+		URL:      "https://hackerone.com/anthropic",
+		Boundaries: Boundaries{
+			SubmissionContact: []string{"bugbounty@anthropic.com"},
+			Notes:             []string{"published contacts: bugbounty@anthropic.com — use the submission channel stated in the policy, not necessarily these addresses"},
+		},
+	}
+	ApplyPlatformSubmission(in, in.URL)
+	if in.Boundaries.SubmissionChannel != "platform:hackerone" {
+		t.Errorf("channel = %q", in.Boundaries.SubmissionChannel)
+	}
+	if !strings.Contains(in.Boundaries.SubmissionText, "HackerOne program page") {
+		t.Errorf("submission text = %q", in.Boundaries.SubmissionText)
+	}
+	if strings.Contains(strings.Join(in.Boundaries.Notes, " "), "submit directly to") {
+		t.Error("stale 'submit by email' note survived")
+	}
+	md := in.Boundaries.Markdown()
+	if !strings.Contains(md, "Submit via") || !strings.Contains(md, "Published contacts") {
+		t.Errorf("markdown missing channel/contact labels:\n%s", md)
+	}
+}
+
 func TestTickoStyleMarkupIsUnderstood(t *testing.T) {
 	b := ExtractBoundaries(tickoFixture, "heuristic")
 	if b.MainnetTesting != "forbidden" {

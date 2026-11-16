@@ -28,6 +28,8 @@ type Boundaries struct {
 	DisclosureText     string   `json:"disclosure_text,omitempty"`
 	SubmissionText     string   `json:"submission_text,omitempty"`
 	SubmissionContact  []string `json:"submission_contact,omitempty"`
+	SubmissionChannel  string   `json:"submission_channel,omitempty"`
+	SubmissionURL      string   `json:"submission_url,omitempty"`
 	ScopeIsStructured  bool     `json:"scope_is_structured,omitempty"`
 	Notes              []string `json:"notes,omitempty"`
 }
@@ -97,6 +99,9 @@ func ExtractBoundaries(policy, confidence string) Boundaries {
 		}
 	}
 	sort.Strings(b.SubmissionContact)
+	if len(b.SubmissionContact) > 0 {
+		b.SubmissionChannel = "email-or-contact"
+	}
 
 	for _, line := range strings.Split(policy, "\n") {
 		low := strings.ToLower(line)
@@ -154,7 +159,7 @@ func ExtractBoundaries(policy, confidence string) Boundaries {
 		b.Notes = append(b.Notes, "research headers required: "+strings.Join(b.RequiredHeaders, ", "))
 	}
 	if len(b.SubmissionContact) > 0 {
-		b.Notes = append(b.Notes, "submit directly to "+strings.Join(b.SubmissionContact, ", ")+" — check the policy for third-party-platform restrictions")
+		b.Notes = append(b.Notes, "published contacts: "+strings.Join(b.SubmissionContact, ", ")+" — use the submission channel stated in the policy, not necessarily these addresses")
 	}
 	if strings.EqualFold(confidence, "heuristic") {
 		b.Notes = append(b.Notes, "these rules were extracted from page text — re-read policy.md before testing")
@@ -242,7 +247,17 @@ func (b Boundaries) Markdown() string {
 		fmt.Fprintf(&out, "| Required headers | `%s` |\n", strings.Join(b.RequiredHeaders, "`, `"))
 	}
 	if len(b.SubmissionContact) > 0 {
-		fmt.Fprintf(&out, "| Report to | `%s` |\n", strings.Join(b.SubmissionContact, "`, `"))
+		label := "Published contacts"
+		if b.SubmissionChannel == "email-or-contact" {
+			label = "Email / contacts (check policy)"
+		}
+		fmt.Fprintf(&out, "| %s | `%s` |\n", label, strings.Join(b.SubmissionContact, "`, `"))
+	}
+	if b.SubmissionChannel != "" {
+		fmt.Fprintf(&out, "| Submit via | %s |\n", b.SubmissionChannel)
+	}
+	if b.SubmissionURL != "" {
+		fmt.Fprintf(&out, "| Submission URL | %s |\n", b.SubmissionURL)
 	}
 	out.WriteString("\n")
 

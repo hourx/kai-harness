@@ -295,6 +295,7 @@ func FetchHackerOne(ctx context.Context, c *netx.Client, handle string) (*Intake
 		in.Boundaries.ScopeIsStructured = len(in.Assets) > 0
 	}
 	in.PolicyHash = hashPolicy(in.Policy)
+	ApplyPlatformSubmission(in, in.URL)
 	return in, nil
 }
 
@@ -326,6 +327,25 @@ func gql(ctx context.Context, c *netx.Client, req gqlRequest, headers map[string
 		}
 	}
 	return fmt.Errorf("HackerOne GraphQL failed after 3 attempts: %w", last)
+}
+
+// ApplyPlatformSubmission corrects the submission channel for programs whose
+// reports go through the platform, not through the email addresses mentioned
+// in their policy (HackerOne is the common case).
+func ApplyPlatformSubmission(in *Intake, platformURL string) {
+	b := &in.Boundaries
+	b.SubmissionChannel = "platform:hackerone"
+	b.SubmissionURL = platformURL
+	b.SubmissionText = "Submit reports through the HackerOne program page (" + platformURL + "). Email addresses in the policy are contacts, not the submission channel."
+	var notes []string
+	for _, n := range b.Notes {
+		if strings.HasPrefix(n, "published contacts:") {
+			notes = append(notes, "emails in the policy are contacts — submit through the HackerOne report form, not by email")
+			continue
+		}
+		notes = append(notes, n)
+	}
+	b.Notes = notes
 }
 
 func str(p *string) string {

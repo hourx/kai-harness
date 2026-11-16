@@ -451,8 +451,15 @@ func (in *Intake) Markdown() string {
 		fmt.Fprintf(&b, "| Expected environment | %s |\n", dash(bd.TestingEnvironment))
 		fmt.Fprintf(&b, "| PoC | %s |\n", yesNotStated(bd.PoCRequired))
 		fmt.Fprintf(&b, "| KYC | %s |\n", yesNotStated(bd.KYCRequired))
+		if bd.SubmissionChannel != "" {
+			fmt.Fprintf(&b, "| Submit via | %s |\n", bd.SubmissionChannel)
+		}
 		if len(bd.SubmissionContact) > 0 {
-			fmt.Fprintf(&b, "| Report to | `%s` |\n", strings.Join(bd.SubmissionContact, "`, `"))
+			label := "Published contacts"
+			if bd.SubmissionChannel == "email-or-contact" {
+				label = "Email / contacts (check policy)"
+			}
+			fmt.Fprintf(&b, "| %s | `%s` |\n", label, strings.Join(bd.SubmissionContact, "`, `"))
 		}
 		if len(bd.RequiredHeaders) > 0 {
 			fmt.Fprintf(&b, "| Headers | `%s` |\n", strings.Join(bd.RequiredHeaders, "`, `"))
