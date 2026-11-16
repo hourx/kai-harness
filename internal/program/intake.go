@@ -41,9 +41,21 @@ type SeverityStat struct {
 	Count   int     `json:"count"`
 }
 
+// Candidate is a host or asset mentioned in prose. It is NOT promoted into
+// scope.txt automatically: unlike a structured platform field, a regex match
+// cannot tell an in-scope asset from an example or an out-of-scope mention.
+type Candidate struct {
+	Identifier string `json:"identifier"`
+	Host       string `json:"host,omitempty"`
+	Path       string `json:"path,omitempty"`
+	Type       string `json:"type"`
+	Section    string `json:"section,omitempty"`
+}
+
 // Intake is everything Phase 0 can learn without logging in.
 type Intake struct {
 	Platform      string                  `json:"platform"`
+	Confidence    string                  `json:"confidence"`
 	Handle        string                  `json:"handle"`
 	Name          string                  `json:"name"`
 	URL           string                  `json:"url"`
@@ -60,10 +72,14 @@ type Intake struct {
 	AverageUpper  int                     `json:"average_bounty_upper,omitempty"`
 	Resolved      int                     `json:"resolved_reports"`
 	Reports90d    int                     `json:"reports_received_90d"`
+	ReportsKnown  bool                    `json:"reports_known"`
 	ResponseEff   float64                 `json:"response_efficiency_pct"`
 	BountyRows    []BountyRow             `json:"bounty_rows,omitempty"`
 	SeverityStats map[string]SeverityStat `json:"severity_stats,omitempty"`
 	Assets        []Asset                 `json:"assets,omitempty"`
+	Candidates    []Candidate             `json:"candidate_assets,omitempty"`
+	Constraints   []string                `json:"constraints,omitempty"`
+	TrustScope    bool                    `json:"-"`
 	Scorecard     Score                   `json:"scorecard,omitempty"`
 	Policy        string                  `json:"-"`
 	FetchedAt     time.Time               `json:"fetched_at"`
@@ -84,10 +100,11 @@ type Score struct {
 // Scope holds the rules derived from structured scope, plus what could not be
 // represented in a host-only gate.
 type Scope struct {
-	In       []string `json:"in"`
-	Out      []string `json:"out"`
-	PathOnly []Asset  `json:"path_scoped"`
-	NonWeb   []Asset  `json:"non_web"`
+	In        []string `json:"in"`
+	Out       []string `json:"out"`
+	PathOnly  []Asset  `json:"path_scoped"`
+	NonWeb    []Asset  `json:"non_web"`
+	OutNonWeb []Asset  `json:"out_non_web"`
 }
 
 // Scope converts structured assets into rules the gate can enforce.
@@ -99,15 +116,18 @@ func (in *Intake) Scope() Scope {
 	var s Scope
 	for _, a := range in.Assets {
 		rule, kind := normalizeRule(a)
-		if kind == "path" {
-			s.PathOnly = append(s.PathOnly, a)
-			continue
-		}
-		if kind == "non-web" || kind == "unparsed" {
-			s.NonWeb = append(s.NonWeb, a)
-			continue
-		}
-		if rule == "" {
+		if kind == "path" || kind == "non-web" || kind == "unparsed" || rule == "" {
+			// Cannot be expressed as a host rule. Keep it visible, but never
+			// present an out-of-scope asset as something to test.
+			if a.Eligible {
+				if kind == "path" {
+					s.PathOnly = append(s.PathOnly, a)
+				} else {
+					s.NonWeb = append(s.NonWeb, a)
+				}
+			} else {
+				s.OutNonWeb = append(s.OutNonWeb, a)
+			}
 			continue
 		}
 		if a.Eligible {
@@ -120,6 +140,20 @@ func (in *Intake) Scope() Scope {
 	s.Out = uniq(s.Out)
 	sort.Strings(s.In)
 	sort.Strings(s.Out)
+	if in.TrustScope {
+		for _, c := range in.Candidates {
+			if c.Host == "" || c.Path != "" || strings.Contains(strings.ToLower(c.Section), "out of scope") {
+				continue
+			}
+			rule := c.Host
+			if strings.HasPrefix(c.Identifier, "*.") && !strings.HasPrefix(rule, "*.") {
+				rule = "*." + rule
+			}
+			s.In = append(s.In, rule)
+		}
+		s.In = uniq(s.In)
+		sort.Strings(s.In)
+	}
 	return s
 }
 
@@ -143,7 +177,7 @@ func normalizeRule(a Asset) (rule, kind string) {
 			return "", "path"
 		}
 		return "*." + host, "wildcard"
-	case "URL", "URL_PATH", "HOST", "DOMAIN", "HOSTNAME":
+	case "URL", "URL_PATH", "API", "HOST", "DOMAIN", "HOSTNAME":
 		host, path := splitHost(id)
 		if host == "" {
 			return "", "unparsed"
@@ -225,31 +259,43 @@ func (in *Intake) Score() Score {
 		s.Money = 0
 		reasons = append(reasons, "no monetary rewards — VDP only; do not rank it like a bounty program")
 	} else if in.TopUpper > 0 {
-		reasons = append(reasons, fmt.Sprintf("reward ceiling %s, typical band %s–%s", money(in.TopUpper), money(in.AverageLower), money(in.AverageUpper)))
+		msg := "reward ceiling " + money(in.TopUpper)
+		if in.AverageUpper > 0 {
+			msg += ", typical band " + money(in.AverageLower) + "–" + money(in.AverageUpper)
+		}
+		reasons = append(reasons, msg)
 	}
 
 	// Crowding: 0-35. Reports per 90 days is the closest public proxy for
-	// how many hunters are already walking the same paths.
-	switch {
-	case in.Reports90d == 0:
-		s.Crowding = 35
-	case in.Reports90d <= 50:
-		s.Crowding = 35
-	case in.Reports90d <= 150:
-		s.Crowding = 29
-	case in.Reports90d <= 400:
-		s.Crowding = 21
-	case in.Reports90d <= 1000:
-		s.Crowding = 12
-	case in.Reports90d <= 2500:
-		s.Crowding = 6
-	default:
-		s.Crowding = 0
-	}
-	if in.Reports90d > 0 {
-		reasons = append(reasons, fmt.Sprintf("%d reports in 90 days — crowded", in.Reports90d))
-		if in.Reports90d > 400 {
-			reasons[len(reasons)-1] += "; duplicates are likely unless you find new surface"
+	// how many hunters are already walking the same paths. Missing data is
+	// scored as unknown, never as "zero competition".
+	if !in.ReportsKnown {
+		s.Crowding = 17
+		reasons = append(reasons, "no public report count — crowding unknown, not zero")
+	} else {
+		switch {
+		case in.Reports90d <= 50:
+			s.Crowding = 35
+		case in.Reports90d <= 150:
+			s.Crowding = 29
+		case in.Reports90d <= 400:
+			s.Crowding = 21
+		case in.Reports90d <= 1000:
+			s.Crowding = 12
+		case in.Reports90d <= 2500:
+			s.Crowding = 6
+		default:
+			s.Crowding = 0
+		}
+		if in.Reports90d > 0 {
+			reason := fmt.Sprintf("%d reports in 90 days — crowded", in.Reports90d)
+			if strings.EqualFold(in.Confidence, "heuristic") {
+				reason = fmt.Sprintf("%d reports submitted (period not stated) — crowded", in.Reports90d)
+			}
+			if in.Reports90d > 400 {
+				reason += "; duplicates are likely unless you find new surface"
+			}
+			reasons = append(reasons, reason)
 		}
 	}
 
@@ -312,9 +358,23 @@ func (in *Intake) Score() Score {
 	if len(in.Assets) == 0 {
 		reasons = append(reasons, "no structured scope published; the full scope is in the policy text")
 	}
+	if len(in.Candidates) > 0 {
+		reasons = append(reasons, fmt.Sprintf("%d host(s) found in prose; unverified — add to scope.txt only after checking the policy", len(in.Candidates)))
+		if s.Surface < 20 {
+			s.Surface += 4
+			if s.Surface > 20 {
+				s.Surface = 20
+			}
+		}
+	}
+	if strings.EqualFold(in.Confidence, "heuristic") {
+		reasons = append(reasons, "extracted from page text by heuristics — the score is a triage hint, not a guarantee")
+	}
 
 	s.Total = s.Money + s.Crowding + s.Speed + s.Surface
 	switch {
+	case strings.EqualFold(in.Confidence, "heuristic"):
+		s.Verdict = "review"
 	case !in.OffersBounty:
 		s.Verdict = "vdp-only"
 	case s.Total >= 70:
@@ -329,8 +389,19 @@ func (in *Intake) Score() Score {
 }
 
 func money(n int) string {
+	if n >= 1_000_000 {
+		v := float64(n) / 1e6
+		if v == float64(int(v)) {
+			return fmt.Sprintf("$%dM", int(v))
+		}
+		return fmt.Sprintf("$%.1fM", v)
+	}
 	if n >= 1000 {
-		return fmt.Sprintf("$%dk", n/1000)
+		v := float64(n) / 1e3
+		if v == float64(int(v)) {
+			return fmt.Sprintf("$%dk", int(v))
+		}
+		return fmt.Sprintf("$%.1fk", v)
 	}
 	return fmt.Sprintf("$%d", n)
 }
@@ -345,8 +416,8 @@ func (in *Intake) Markdown() string {
 	fmt.Fprintf(&b, "| money | crowding | speed | surface |\n| ---: | ---: | ---: | ---: |\n| %d/25 | %d/35 | %d/20 | %d/20 |\n\n",
 		s.Money, s.Crowding, s.Speed, s.Surface)
 	fmt.Fprintf(&b, "%s\n\n", in.URL)
-	fmt.Fprintf(&b, "Fetched %s · state `%s` · submission `%s` · website %s\n\n",
-		in.FetchedAt.Format(time.RFC3339), in.State, in.Submission, dash(in.Website))
+	fmt.Fprintf(&b, "Fetched %s · confidence `%s` · state `%s` · submission `%s` · website %s\n\n",
+		in.FetchedAt.Format(time.RFC3339), in.confidenceLabel(), in.State, in.Submission, dash(in.Website))
 
 	b.WriteString("## Why this score\n\n")
 	for _, r := range s.Reasons {
@@ -355,23 +426,53 @@ func (in *Intake) Markdown() string {
 	b.WriteString("\n")
 
 	b.WriteString("## Rewards\n\n")
-	if in.OffersBounty {
-		fmt.Fprintf(&b, "| | low | medium | high | critical |\n| --- | ---: | ---: | ---: | ---: |\n")
-		if len(in.BountyRows) == 0 {
-			fmt.Fprintf(&b, "| reward | %s | %s | %s | %s |\n", money(in.AverageLower), money(in.AverageLower), money(in.AverageUpper), money(in.TopUpper))
-		} else {
-			for _, row := range in.BountyRows {
-				fmt.Fprintf(&b, "| %s | %s | %s | %s | %s |\n", dash(row.Name),
-					money(row.Low), money(row.Medium), money(row.High), money(row.Critical))
-				fmt.Fprintf(&b, "| %s min | %s | %s | %s | %s |\n", dash(row.Name),
-					money(row.Minimums[0]), money(row.Minimums[1]), money(row.Minimums[2]), money(row.Minimums[3]))
+	if !in.OffersBounty {
+		b.WriteString("No bounty table — this program awards recognition, not money.\n\n")
+	} else if len(in.BountyRows) == 0 && in.TopUpper == 0 {
+		b.WriteString("No reward figures could be extracted from the page text. Read `policy.md`.\n\n")
+	} else {
+		simple := len(in.BountyRows) > 0
+		for _, row := range in.BountyRows {
+			if row.Medium != 0 || row.High != 0 || row.Critical != 0 {
+				simple = false
 			}
 		}
-		fmt.Fprintf(&b, "\nBase %s · minimum %s · top %s–%s · average %s–%s · %s\n\n",
-			money(in.Base), money(in.Minimum), money(in.TopLower), money(in.TopUpper),
-			money(in.AverageLower), money(in.AverageUpper), in.Currency)
-	} else {
-		b.WriteString("No bounty table — this program awards recognition, not money.\n\n")
+		if simple {
+			b.WriteString("| severity | max |\n| --- | ---: |\n")
+			for _, row := range in.BountyRows {
+				fmt.Fprintf(&b, "| %s | %s |\n", dash(row.Name), money(row.Low))
+			}
+		} else {
+			fmt.Fprintf(&b, "| | low | medium | high | critical |\n| --- | ---: | ---: | ---: | ---: |\n")
+			if len(in.BountyRows) == 0 {
+				fmt.Fprintf(&b, "| reward | %s | %s | %s | %s |\n", money(in.AverageLower), money(in.AverageLower), money(in.AverageUpper), money(in.TopUpper))
+			} else {
+				for _, row := range in.BountyRows {
+					fmt.Fprintf(&b, "| %s | %s | %s | %s | %s |\n", dash(row.Name),
+						money(row.Low), money(row.Medium), money(row.High), money(row.Critical))
+					if row.Minimums != [4]int{} {
+						fmt.Fprintf(&b, "| %s min | %s | %s | %s | %s |\n", dash(row.Name),
+							money(row.Minimums[0]), money(row.Minimums[1]), money(row.Minimums[2]), money(row.Minimums[3]))
+					}
+				}
+			}
+		}
+		var facts []string
+		if in.Base > 0 {
+			facts = append(facts, "base "+money(in.Base))
+		}
+		if in.TopUpper > 0 {
+			if in.TopLower > 0 {
+				facts = append(facts, "top "+money(in.TopLower)+"–"+money(in.TopUpper))
+			} else {
+				facts = append(facts, "top up to "+money(in.TopUpper))
+			}
+		}
+		if in.AverageUpper > 0 {
+			facts = append(facts, "average "+money(in.AverageLower)+"–"+money(in.AverageUpper))
+		}
+		facts = append(facts, in.Currency)
+		b.WriteString("\n" + strings.Join(facts, " · ") + "\n\n")
 	}
 
 	if len(in.SeverityStats) > 0 {
@@ -381,7 +482,13 @@ func (in *Intake) Markdown() string {
 				fmt.Fprintf(&b, "| %s | %d | %s |\n", k, st.Count, money(int(st.Average)))
 			}
 		}
-		fmt.Fprintf(&b, "\n%d reports resolved in total, %d received in the last 90 days.\n\n", in.Resolved, in.Reports90d)
+		if in.ReportsKnown {
+			fmt.Fprintf(&b, "\n%d reports resolved in total, %d received in the last 90 days.\n\n", in.Resolved, in.Reports90d)
+		} else if in.Resolved > 0 {
+			fmt.Fprintf(&b, "\n%d paid reports reported by the platform.\n\n", in.Resolved)
+		} else {
+			b.WriteString("\n")
+		}
 	}
 
 	b.WriteString("## Scope derived from the platform\n\n")
@@ -416,11 +523,35 @@ func (in *Intake) Markdown() string {
 		b.WriteString("\n")
 	}
 
+	if len(in.Candidates) > 0 {
+		b.WriteString("## Candidate hosts from prose (unverified)\n\n")
+		b.WriteString("Found near an in-scope heading. Check the source before using them — ")
+		b.WriteString("`bountykit intake <url> --trust-scope` promotes them to `scope.txt`.\n\n")
+		for _, c := range in.Candidates {
+			fmt.Fprintf(&b, "- `%s` (%s, section: %s)\n", c.Identifier, c.Type, dash(c.Section))
+		}
+		b.WriteString("\n")
+	}
+	if len(in.Constraints) > 0 {
+		b.WriteString("## Testing constraints found in the policy\n\n")
+		for _, c := range in.Constraints {
+			fmt.Fprintf(&b, "- %s\n", c)
+		}
+		b.WriteString("\n")
+	}
+
 	b.WriteString("## Read before testing\n\n")
 	b.WriteString("`policy.md` holds the full program policy: out-of-scope vulnerability classes, ")
 	b.WriteString("required research headers, account rules and disclosure terms. ")
 	b.WriteString("The host gate cannot enforce any of those.\n")
 	return b.String()
+}
+
+func (in *Intake) confidenceLabel() string {
+	if in.Confidence == "" {
+		return "structured"
+	}
+	return in.Confidence
 }
 
 func bountyMark(a Asset) string {

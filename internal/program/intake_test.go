@@ -67,7 +67,7 @@ func TestScoreVerdicts(t *testing.T) {
 		{
 			name: "rich uncrowded program",
 			in: Intake{
-				OffersBounty: true, TopUpper: 50000, Reports90d: 20, ResponseEff: 100,
+				OffersBounty: true, TopUpper: 50000, Reports90d: 20, ReportsKnown: true, ResponseEff: 100,
 				Assets: []Asset{{Identifier: "*.new.example", Type: "WILDCARD", Eligible: true}},
 			},
 			want: "go",
@@ -75,7 +75,7 @@ func TestScoreVerdicts(t *testing.T) {
 		{
 			name: "crowded big program",
 			in: Intake{
-				OffersBounty: true, TopUpper: 200000, Reports90d: 5000, ResponseEff: 20,
+				OffersBounty: true, TopUpper: 200000, Reports90d: 5000, ReportsKnown: true, ResponseEff: 20,
 				Assets: []Asset{{Identifier: "a.shop.example", Type: "URL", Eligible: true}},
 			},
 			want: "skip",

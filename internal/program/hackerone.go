@@ -219,6 +219,7 @@ func FetchHackerOne(ctx context.Context, c *netx.Client, handle string) (*Intake
 		AverageUpper: num(t.AvgUpper),
 		Resolved:     num(t.Resolved),
 		Reports90d:   num(t.Reports90d),
+		ReportsKnown: true,
 		ResponseEff:  flt(t.ResponseEff),
 		Policy:       str(t.Policy),
 		FetchedAt:    time.Now().UTC(),

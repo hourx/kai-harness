@@ -15,6 +15,7 @@ import (
 // the scope files that `init` created with rules derived from the platform.
 func Apply(p *workspace.Program, in *Intake) error {
 	sc := in.Scope()
+	in.Scorecard = in.Score()
 
 	b, err := json.MarshalIndent(in, "", "  ")
 	if err != nil {
@@ -45,6 +46,19 @@ func Apply(p *workspace.Program, in *Intake) error {
 	}
 	for _, r := range sc.In {
 		fmt.Fprintln(&scope, r)
+	}
+	if in.TrustScope {
+		fmt.Fprintln(&scope, "")
+		fmt.Fprintln(&scope, "# The host rules above were promoted from page text by --trust-scope.")
+		fmt.Fprintln(&scope, "# VERIFY each one against policy.md before relying on it.")
+		for _, c := range in.Candidates {
+			if c.Path != "" {
+				fmt.Fprintf(&scope, "#   %s (path-restricted, not enabled)\n", c.Identifier)
+			}
+		}
+	} else if len(in.Candidates) > 0 {
+		fmt.Fprintf(&scope, "# %d candidate host(s) from page text are NOT enabled. See intake.json.\n", len(in.Candidates))
+		fmt.Fprintln(&scope, "# Use --trust-scope only after verifying each one against the policy.")
 	}
 	if err := write(filepath.Join(p.Dir, "scope.txt"), []byte(scope.String())); err != nil {
 		return err

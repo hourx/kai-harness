@@ -1,4 +1,4 @@
-# bountykit — SPEC v0.4
+# bountykit — SPEC v0.5
 
 Deterministic context-pack builder for bug bounty.
 Fase yang dikerjakan tool: **Program Selection (bantu) → Pre-Hunt (kumpulkan) → Recon → Mapping**.
@@ -43,6 +43,10 @@ Bukti dari dua repo yang ada:
 - `recon` menerima host eksak dari `scope.txt` (program tanpa wildcard tetap bisa direcon)
 
 ### Dikerjakan v0.5
+- `intake` multi-sumber: H1 (GraphQL), Cantina, Immunefi, GitBook, meta, halaman mandiri
+- confidence `structured` vs `heuristic`; verdict `review` untuk hasil heuristic
+
+### Dikerjakan v0.6
 - `report` — laporan markdown/HTML per program
 - adapter penuh (katana, smuggling check)
 
@@ -124,8 +128,21 @@ metadata + policy + reward, satu query scope dengan paginasi 100.
 Pemetaan scope sengaja konservatif: `URL` → host, `WILDCARD` → `*.`, `CIDR` →
 CIDR. **URL dengan path tidak dijadikan aturan host** karena gate hanya
 memahami host; melebarkan `example.com/api/*` menjadi `example.com` akan
-mengizinkan pengujian di luar izin program. Aset non-web (app ID, source,
-hardware) tercatat di intake.json dan scorecard, tidak ditebak sebagai host.
+mengizinkan pengujian di luar izin program. Aset non-web (app ID, contract,
+source, hardware) tercatat di intake.json dan scorecard, tidak ditebak sebagai host.
+
+Sumber non-H1 dibaca dari teks halaman (GitBook memakai varian `.md`). Karena
+regex tidak bisa membedakan contoh dari aturan, hasilnya berlabel
+`confidence: heuristic` dan verdictnya selalu `review`. Host yang ditemukan
+dekat heading "in scope" masuk `candidate_assets`, **tidak** langsung ke
+`scope.txt`. Operator memverifikasi lalu memakai `--trust-scope` untuk
+mempromosikannya; ini tercatat di comment `scope.txt`.
+
+Data yang diekstrak dari teks: reward per severity (termasuk `<1M USDC`),
+"Maximum Bounty/Max payout", jumlah findings/paid reports, constraint testing
+(no-mainnet, PoC, KYC, disclosure), dan aset yang disebut di bagian scope.
+Kalau jumlah report tidak dipublikasikan, komponen crowding dinilai
+"unknown" (17/35), bukan "kompetisi nol".
 
 ---
 
@@ -285,6 +302,7 @@ v0.4:
 
 ```
 bountykit intake <hackerone-url|handle> [--name slug] [--dry-run] [--force]
+bountykit intake <url> [--name slug] [--dry-run] [--force] [--trust-scope]
 ```
 
 v0.5:
@@ -305,6 +323,7 @@ bountykit report <program>
 6. `session.json` mode 0600, dan `session show` selalu menutupi nilai rahasia.
 7. `intake` hanya membaca API publik platform: tidak login, tidak menyentuh aset target.
 8. Aset berskope path tidak pernah dilebarkan jadi aturan host.
+9. Host dari teks halaman tetap jadi kandidat sampai operator memverifikasi dan memakai `--trust-scope`.
 
 ---
 
@@ -315,5 +334,5 @@ bountykit report <program>
 | v0.1 | `init`, `scope`, `pack`, `status` | ZIP bisa dibuat, gate identik dengan Kairos (diuji), agent bisa membaca BRIEF |
 | v0.2 | `recon`, `diff`, snapshot | Satu run menghasilkan `subs/live/urls/js/endpoints`; diff terisi — **selesai** |
 | v0.3 | `map`, `next`, session import | Antrian tes terurut + hipotesis per kelas vuln, permukaan auth ikut terpetakan — **selesai** |
-| v0.4 | `intake`, host eksak | Skor Phase 0 + scope terisi otomatis dari halaman publik — **selesai** |
-| v0.5 | `report`, adapter penuh | Laporan markdown/HTML per program |
+| v0.5 | multi-source intake | H1 terstruktur + 5 sumber teks; verdict `review` untuk heuristic — **selesai** |
+| v0.6 | `report`, adapter penuh | Laporan markdown/HTML per program |

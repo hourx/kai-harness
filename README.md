@@ -67,20 +67,33 @@ unzip dist/acme_*.zip -d workspace/
 
 ## Phase 0 intake
 
-`bountykit intake <hackerone-url-or-handle>` reads only the platform's **public
-directory API** — it does not log in and does not touch target assets. It pulls:
+`bountykit intake <url-or-handle>` reads **public program pages only** — it does
+not log in and does not touch target assets. Supported readers:
 
-- published scope: URL / wildcard / CIDR / app IDs / source-code targets, with
-  bounty eligibility and maximum severity per asset
-- reward table per severity, average paid amounts, resolved reports, reports in
-  the last 90 days, response efficiency
-- the full policy markdown (out-of-scope vulnerability classes, required
-  headers, test-plan rules)
+| Source | How it is read | Confidence |
+| --- | --- | --- |
+| `hackerone.com/<handle>` | public GraphQL: scope, rewards, policy, report metrics, paginated | `structured` |
+| `*.gitbook.io/...` | the page's `.md` variant | `heuristic` |
+| `cantina.xyz/bounties/<uuid>` | server-rendered page text | `heuristic` |
+| `immunefi.com/bug-bounty/<slug>/information/` | page text (+ use `/scope/` for asset list) | `heuristic` |
+| `bugbounty.meta.com/payout-guidelines/<slug>` | page text (400-with-body tolerated) | `heuristic` |
+| `ethereum.org/bug-bounty/` and any other URL | page text | `heuristic` |
 
-It then writes a scorecard with four independent components — money, crowding,
-speed, surface — and a verdict (`go` / `careful` / `skip` / `vdp-only`). The
-biggest anti-duplicate signal it gives you is **crowding**: 249 reports in 90
-days means re-testing the obvious paths is wasted effort.
+Outputs: reward table, severity distribution where published, report/payout
+counters, testing constraints (no-mainnet, PoC, KYC, disclosure), a scorecard
+(money / crowding / speed / surface), `scope.txt`, `out-of-scope.txt`,
+`policy.md`, `program.md` and `intake.json`.
+
+Heuristic sources return verdict **`review`**, never `go`. Hosts mentioned near
+an in-scope heading are recorded as `candidate_assets` in `intake.json` but are
+**not** written into `scope.txt` by default — a regex cannot tell an in-scope
+host from an example. Verify them and rerun with `--trust-scope` if you want
+them promoted:
+
+```
+bountykit intake cantina.xyz/bounties/... --name uniswap --dry-run
+bountykit intake cantina.xyz/bounties/... --name uniswap --trust-scope
+```
 
 Scope is derived conservatively:
 
@@ -90,7 +103,7 @@ Scope is derived conservatively:
 | `WILDCARD` | `*.domain` rule |
 | `CIDR` | CIDR rule |
 | URL with a path | **excluded** — a host-only gate would be broader than allowed |
-| app ID / source / hardware | listed in the scorecard, never guessed as a host |
+| app ID / contract / source / hardware | listed in the scorecard, never guessed as a host |
 
 Out-of-scope rules from the platform are written to `out-of-scope.txt`. Rules
 that cannot be expressed as hosts (vulnerability classes, required headers)
@@ -150,7 +163,8 @@ dist/<program>_<ts>.zip  handoff archive
 | v0.2 | `recon`, `diff`, snapshots — done |
 | v0.3 | `map`, `next`, session import — done |
 | v0.4 | `intake` (Phase 0), exact-host recon — done |
-| v0.5 | `report`, full adapters |
+| v0.5 | multi-source intake (H1, Cantina, Immunefi, GitBook, self-hosted) |
+| v0.6 | `report`, full adapters |
 
 ## Rules
 
@@ -158,5 +172,6 @@ dist/<program>_<ts>.zip  handoff archive
 2. Out-of-scope always wins.
 3. No credentials, cookies or tokens in a pack unless `--include-session` is passed, and the tool says so loudly when it is.
 4. `data/` and `dist/` never enter git.
-5. `intake` reads public directory data only. Never log in, never touch a target asset.
+5. `intake` reads public pages only. Never log in, never touch a target asset.
 6. Path-scoped platform assets are never widened into host rules.
+7. A host found in prose stays a candidate until the operator verifies it and passes `--trust-scope`.

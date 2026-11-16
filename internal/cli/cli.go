@@ -32,7 +32,7 @@ Usage:
 Commands:
   init    <program> [--platform P] [--url U] [--verdict V] [--domain d,d]
                                                              create workspace
-  intake  <hackerone-url|handle> [--name slug] [--dry-run] [--force]
+  intake  <url|handle> [--name slug] [--dry-run] [--force] [--trust-scope]
                                                              Phase 0: read program
   scope   <program> <host|cidr>                              scope gate (IN/OUT)
   recon   <program> [--domain d] [--rps N] [--max-hosts N]
@@ -135,23 +135,34 @@ func cmdIntake(args []string) int {
 	nameFlag := fs.String("name", "", "workspace slug (default: HackerOne handle)")
 	dryRun := fs.Bool("dry-run", false, "print the scorecard without creating a workspace")
 	force := fs.Bool("force", false, "overwrite an existing workspace's scope files")
+	trustScope := fs.Bool("trust-scope", false, "promote hosts found in page text into scope.txt (verify first)")
 	if err := fs.Parse(rest); err != nil {
 		return 2
 	}
 	if len(pos) != 1 {
-		return fail(errors.New("usage: bountykit intake <hackerone-url|handle> [--name slug] [--dry-run] [--force]"))
+		return fail(errors.New("usage: bountykit intake <url|handle> [--name slug] [--dry-run] [--force] [--trust-scope]"))
 	}
 
-	handle, canonical, err := program.HackerOneHandle(pos[0])
+	platform, err := program.DetectPlatform(pos[0])
 	if err != nil {
 		return fail(err)
 	}
 	client := netx.New(program.UserAgent(), 5, nil)
 	defer client.Close()
-	in, err := program.FetchHackerOne(context.Background(), client, handle)
+	var in *program.Intake
+	if platform == "h1" {
+		handle, _, err := program.HackerOneHandle(pos[0])
+		if err != nil {
+			return fail(err)
+		}
+		in, err = program.FetchHackerOne(context.Background(), client, handle)
+	} else {
+		in, err = program.FetchWeb(context.Background(), client, pos[0])
+	}
 	if err != nil {
 		return fail(err)
 	}
+	in.TrustScope = *trustScope
 	if *dryRun {
 		fmt.Print(in.Markdown())
 		return 0
@@ -159,7 +170,7 @@ func cmdIntake(args []string) int {
 
 	slug := *nameFlag
 	if slug == "" {
-		slug = handle
+		slug = in.Handle
 	}
 	if err := workspace.ValidateName(slug); err != nil {
 		return fail(err)
@@ -169,8 +180,8 @@ func cmdIntake(args []string) int {
 		verdict = "bounty"
 	}
 	p, err := workspace.Create(slug, workspace.Meta{
-		Platform:     "h1",
-		ProgramURL:   canonical,
+		Platform:     platform,
+		ProgramURL:   in.URL,
 		ScopeVerdict: verdict,
 	})
 	if errors.Is(err, workspace.ErrExists) {
@@ -185,15 +196,18 @@ func cmdIntake(args []string) int {
 	if err := program.Apply(p, in); err != nil {
 		return fail(err)
 	}
-	_ = p.AppendAudit(fmt.Sprintf("intake from %s (%s), %d assets", canonical, in.FetchedAt.Format(time.RFC3339), len(in.Assets)))
+	_ = p.AppendAudit(fmt.Sprintf("intake from %s (%s, %s), %d assets, %d candidates",
+		in.URL, platform, in.FetchedAt.Format(time.RFC3339), len(in.Assets), len(in.Candidates)))
 
 	fmt.Print(in.Markdown())
 	fmt.Printf("\nworkspace  %s\n", p.Dir)
 	sc := in.Scope()
 	if len(sc.In) > 0 {
-		fmt.Printf("next       bountykit recon %s   # %d seed host(s), no CT noise for exact hosts\n", slug, len(sc.In))
+		fmt.Printf("next       bountykit recon %s   # %d seed host(s)\n", slug, len(sc.In))
+	} else if len(in.Candidates) > 0 {
+		fmt.Printf("next       verify %d candidate host(s) in policy.md, then rerun with --trust-scope\n", len(in.Candidates))
 	} else {
-		fmt.Printf("next       read %s/policy.md, then write scope.txt by hand\n", p.Dir)
+		fmt.Printf("next       read %s/policy.md — this program has no host-based scope\n", p.Dir)
 	}
 	return 0
 }
