@@ -11,7 +11,20 @@ Desain: [`SPEC.md`](SPEC.md).
 
 ---
 
-## Mulai dari sini (urutan lengkap)
+## Mulai dari sini (satu perintah)
+
+```bash
+kai doctor                  # cek lingkungan sekali jalan
+kai run 'https://hackerone.com/anthropic'
+kai run 'https://hackerone.com/anthropic' --step    # mode belajar: berhenti tiap fase
+```
+
+`kai run` melakukan urutan di bawah otomatis: intake → boundaries → session check →
+recon → analyze → next → pack → audit. Kalau tidak ada scope host (program web3),
+recon dilewati dan jalur non-web yang dipakai.
+
+Di bawah ini urutan **manual** — berguna kalau mau mengawasi tiap tahap atau
+sedang mempelajari alurnya.
 
 Contoh memakai program HackerOne. Ganti `temu` dengan programmu.
 
@@ -172,6 +185,9 @@ mandiri lain.
 
 | Perintah | Fungsi |
 |---|---|
+| `run <url> [--step] [--clone] [--no-session] [--rps N] [-o dist]` | workflow lengkap satu perintah |
+| `audit <program\|file.zip> [-dir dist]` | cek konsistensi ZIP / handoff |
+| `doctor [--no-net]` | cek git, Go, adapter, proxy, session, konektivitas |
 | `init <program> [--platform P] [--url U] [--domain d,d]` | workspace kosong manual |
 | `intake <url\|handle> [--name slug] [--dry-run] [--force] [--trust-scope] [--max-links N] [--no-follow]` | Phase 0 dari halaman program + referensinya |
 | `boundaries <program>` | aturan, batasan, kutipan verbatim |
@@ -299,4 +315,4 @@ dibuat belakangan setelah rilis stabil — bukan mengubah kai jadi library.
 | v0.4–v0.6 | intake H1 + multi-sumber, boundaries verbatim |
 | v0.7–v0.8 | rule diff, aset non-web, analisis repo/kontrak, referensi dokumentasi |
 | v0.9 | rename identitas `kai`, module & remote GitHub |
-| v1.0 | `kai run`, `kai audit`, config, penguraian repo organisasi |
+| v1.0 | `run`, `audit`, `doctor` — satu perintah untuk alur penuh |

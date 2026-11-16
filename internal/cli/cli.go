@@ -10,9 +10,12 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
+	"github.com/hourx/kai/internal/audit"
+	"github.com/hourx/kai/internal/doctor"
 	"github.com/hourx/kai/internal/netx"
 	"github.com/hourx/kai/internal/nonweb"
 	"github.com/hourx/kai/internal/pack"
@@ -31,6 +34,11 @@ Usage:
   kai <command> [arguments]
 
 Commands:
+  run     <url> [--name slug] [--step] [--clone] [--no-session] [--rps N]
+                    [--max-links N] [--no-follow] [-o dist] [--force]
+                                                             full guided workflow
+  audit   <program|file.zip>                                 check handoff consistency
+  doctor  [--no-net]                                         check local environment
   init    <program> [--platform P] [--url U] [--verdict V] [--domain d,d]
                                                              create workspace
   intake  <url|handle> [--name slug] [--dry-run] [--force] [--trust-scope]
@@ -72,6 +80,12 @@ func Run(args []string) int {
 	case "help", "-h", "--help":
 		fmt.Print(usageText)
 		return 0
+	case "run":
+		return cmdRun(args[1:])
+	case "audit":
+		return cmdAudit(args[1:])
+	case "doctor":
+		return cmdDoctor(args[1:])
 	case "init":
 		return cmdInit(args[1:])
 	case "intake":
@@ -136,6 +150,192 @@ func split(args []string, valueFlags map[string]bool) (pos, rest []string) {
 		pos = append(pos, a)
 	}
 	return pos, rest
+}
+
+func cmdRun(args []string) int {
+	pos, rest := split(args, map[string]bool{"name": true, "rps": true, "max-links": true, "o": true})
+	fs := flag.NewFlagSet("run", flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+	nameFlag := fs.String("name", "", "workspace slug (default: derived from URL)")
+	stepMode := fs.Bool("step", false, "pause before each phase")
+	cloneRepos := fs.Bool("clone", false, "git clone in-scope repositories")
+	noSession := fs.Bool("no-session", false, "ignore stored session")
+	rps := fs.Int("rps", 10, "requests per second during recon")
+	maxLinks := fs.Int("max-links", 8, "documentation links to follow during intake")
+	noFollow := fs.Bool("no-follow", false, "do not follow documentation links")
+	out := fs.String("o", "dist", "output directory for the handoff ZIP")
+	force := fs.Bool("force", false, "replace an existing workspace's scope files")
+	if err := fs.Parse(rest); err != nil {
+		return 2
+	}
+	if len(pos) != 1 {
+		return fail(errors.New("usage: kai run <url> [--name slug] [--step] [--clone] [--no-session] [--rps N] [--max-links N] [--no-follow] [-o dist] [--force]"))
+	}
+
+	programURL := pos[0]
+	name := *nameFlag
+	if name == "" {
+		name = program.SuggestName(programURL)
+	}
+	gate := func(title, detail string) bool {
+		if *stepMode {
+			return promptConfirm(title, detail)
+		}
+		fmt.Printf("\n── %s ── %s\n", title, detail)
+		return true
+	}
+
+	// 1. Intake.
+	iargs := []string{programURL, "--name", name}
+	if _, err := workspace.Open(name); err == nil {
+		iargs = append(iargs, "--force")
+	}
+	if *force {
+		iargs = append(iargs, "--force")
+	}
+	if *maxLinks != 8 {
+		iargs = append(iargs, "--max-links", strconv.Itoa(*maxLinks))
+	}
+	if *noFollow {
+		iargs = append(iargs, "--no-follow")
+	}
+	if !gate("intake", "read program page + relevant documentation") {
+		return 0
+	}
+	if code := cmdIntake(iargs); code != 0 {
+		return code
+	}
+
+	// 2. Boundaries.
+	if !gate("boundaries", "read scope limits and rules") {
+		return 0
+	}
+	if code := cmdBoundaries([]string{name}); code != 0 {
+		return code
+	}
+
+	// 3. Session.
+	if !gate("session", "decide whether to use stored credentials") {
+		return 0
+	}
+	if *noSession {
+		fmt.Println("session  skipped (--no-session)")
+	} else if s, err := session.Load(workspace.Dir(name)); err == nil {
+		fmt.Printf("session  stored (%d cookies, %d headers) — will be used for in-scope hosts only\n", len(s.Cookies), len(s.Headers))
+	} else {
+		fmt.Println("session  none — unauthenticated surface only")
+	}
+
+	p, err := workspace.Open(name)
+	if err != nil {
+		return fail(err)
+	}
+
+	// 4. Recon, skipped for programs with no host-level scope.
+	if len(p.ExactHosts()) == 0 && len(p.DeriveDomains()) == 0 {
+		fmt.Println("\n── recon ── skipped: no host-level scope; non-web targets go through analyze")
+	} else {
+		if !gate("recon", fmt.Sprintf("probe %d in-scope seed host(s)", len(p.ExactHosts()))) {
+			return 0
+		}
+		rargs := []string{name, "--rps", strconv.Itoa(*rps)}
+		if *noSession {
+			rargs = append(rargs, "--no-session")
+		}
+		if code := cmdRecon(rargs); code != 0 {
+			return code
+		}
+	}
+
+	// 5. Non-web analysis.
+	aargs := []string{name}
+	if *cloneRepos {
+		aargs = append(aargs, "--clone")
+	}
+	if !gate("analyze", "inspect in-scope repositories and contracts") {
+		return 0
+	}
+	if code := cmdAnalyze(aargs); code != 0 {
+		return code
+	}
+
+	// 6. Queue.
+	if !gate("next", "build the ranked test queue") {
+		return 0
+	}
+	if code := cmdNext([]string{name}); code != 0 {
+		return code
+	}
+
+	// 7. Pack.
+	if !gate("pack", "build the handoff ZIP") {
+		return 0
+	}
+	if code := cmdPack([]string{name, "-o", *out}); code != 0 {
+		return code
+	}
+
+	// 8. Audit.
+	if !gate("audit", "verify the handoff is internally consistent") {
+		return 0
+	}
+	code := cmdAudit([]string{name, "-dir", *out})
+	if code == 0 {
+		fmt.Printf("\nSelesai. ZIP: %s/<program>_*.zip → workspace/%s/ di Kairos\n", *out, name)
+		fmt.Println("Peringatan: session tidak ikut di-pack. Agent Kairos perlu session sendiri.")
+	}
+	return code
+}
+
+func cmdAudit(args []string) int {
+	pos, rest := split(args, map[string]bool{"dir": true})
+	fs := flag.NewFlagSet("audit", flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+	dir := fs.String("dir", "dist", "directory containing the handoff ZIP")
+	if err := fs.Parse(rest); err != nil {
+		return 2
+	}
+	if len(pos) != 1 {
+		return fail(errors.New("usage: kai audit <program|file.zip> [-dir dist]"))
+	}
+
+	target := pos[0]
+	if !strings.HasSuffix(strings.ToLower(target), ".zip") {
+		matches, _ := filepath.Glob(filepath.Join(*dir, target+"_*.zip"))
+		if len(matches) == 0 {
+			return fail(fmt.Errorf("no ZIP for %s in %s — run: kai pack %s", target, *dir, target))
+		}
+		sort.Strings(matches)
+		target = matches[len(matches)-1]
+	}
+
+	res, err := audit.RunZip(target)
+	if err != nil {
+		return fail(err)
+	}
+	fmt.Print(res.Text())
+	if res.Failed() > 0 {
+		return 1
+	}
+	return 0
+}
+
+func cmdDoctor(args []string) int {
+	fs := flag.NewFlagSet("doctor", flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+	noNet := fs.Bool("no-net", false, "skip the public network check")
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+	if fs.NArg() != 0 {
+		return fail(errors.New("usage: kai doctor [--no-net]"))
+	}
+	report := doctor.Run(context.Background(), doctor.Options{Net: !*noNet})
+	fmt.Print(report.Text())
+	if report.Failures() > 0 {
+		return 1
+	}
+	return 0
 }
 
 func cmdIntake(args []string) int {
