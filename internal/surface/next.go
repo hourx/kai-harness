@@ -256,9 +256,12 @@ func AddNonWeb(p *Plan, assets []NonWebAsset, constraints []string) {
 		if a.Detail != "" {
 			why = append(why, a.Detail)
 		}
-		if a.Unverified {
+		if a.Unverified && a.Type != "SYSTEM" {
 			score -= 30
 			why = append(why, "candidate from page text — verify against the policy first")
+		}
+		if a.Type == "SYSTEM" {
+			why = append(why, "named system from impact-based scope — not a host rule")
 		}
 		probe := probes[class]
 		if a.Hint != "" {

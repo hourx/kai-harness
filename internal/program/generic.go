@@ -449,7 +449,7 @@ var constraintRules = []struct {
 	pattern string
 	label   string
 }{
-	{`(?i)no testing on mainnet|do not test.{0,40}mainnet|testing on mainnet code`, "No testing on mainnet deployed code — use testnet or local forks"},
+	{`(?i)(do not test|not test|no testing|testing (on|against)|must not test)[^\n]{0,100}(mainnet|production|live system)`, "Do NOT test on mainnet/production — use testnet or local forks"},
 	{`(?i)proof of concept.{0,30}required|poc required|poc is always required`, "PoC required for every report"},
 	{`(?i)\bkyc\b`, "KYC / identity verification required"},
 	{`(?i)public disclosure`, "No public disclosure before the issue is fixed and paid"},
@@ -461,10 +461,23 @@ var constraintRules = []struct {
 }
 
 func extractConstraints(policy string) []string {
+	text := plain(policy)
 	var out []string
 	for _, r := range constraintRules {
-		if regexp.MustCompile(r.pattern).MatchString(policy) {
+		if regexp.MustCompile(r.pattern).MatchString(text) {
 			out = append(out, r.label)
+		}
+	}
+	return uniqueStrings(out)
+}
+
+func uniqueStrings(in []string) []string {
+	seen := map[string]bool{}
+	out := make([]string, 0, len(in))
+	for _, v := range in {
+		if !seen[v] {
+			seen[v] = true
+			out = append(out, v)
 		}
 	}
 	return out

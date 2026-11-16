@@ -361,7 +361,15 @@ func (in *Intake) Score() Score {
 		reasons = append(reasons, "no structured scope published; the full scope is in the policy text")
 	}
 	if len(in.Candidates) > 0 {
-		reasons = append(reasons, fmt.Sprintf("%d host(s) found in prose; unverified — add to scope.txt only after checking the policy", len(in.Candidates)))
+		hosts, systems := 0, 0
+		for _, c := range in.Candidates {
+			if c.Type == "SYSTEM" {
+				systems++
+			} else {
+				hosts++
+			}
+		}
+		reasons = append(reasons, fmt.Sprintf("%d surface candidate(s) from prose (%d host, %d system) — unverified", len(in.Candidates), hosts, systems))
 		if s.Surface < 20 {
 			s.Surface += 4
 			if s.Surface > 20 {
@@ -426,6 +434,24 @@ func (in *Intake) Markdown() string {
 		fmt.Fprintf(&b, "- %s\n", r)
 	}
 	b.WriteString("\n")
+
+	b.WriteString("## Key boundaries\n\n")
+	if bd := in.Boundaries; bd.MainnetTesting != "" {
+		fmt.Fprintf(&b, "| Rule | Value |\n| --- | --- |\n")
+		fmt.Fprintf(&b, "| Mainnet / live testing | **%s** |\n", bd.MainnetTesting)
+		fmt.Fprintf(&b, "| Expected environment | %s |\n", dash(bd.TestingEnvironment))
+		fmt.Fprintf(&b, "| PoC | %s |\n", yesNotStated(bd.PoCRequired))
+		fmt.Fprintf(&b, "| KYC | %s |\n", yesNotStated(bd.KYCRequired))
+		if len(bd.SubmissionContact) > 0 {
+			fmt.Fprintf(&b, "| Report to | `%s` |\n", strings.Join(bd.SubmissionContact, "`, `"))
+		}
+		if len(bd.RequiredHeaders) > 0 {
+			fmt.Fprintf(&b, "| Headers | `%s` |\n", strings.Join(bd.RequiredHeaders, "`, `"))
+		}
+		b.WriteString("\nFull rules and verbatim text: `boundaries.md`.\n\n")
+	} else {
+		b.WriteString("No structured boundaries extracted — treat as unknown, read `policy.md`.\n\n")
+	}
 
 	b.WriteString("## Rewards\n\n")
 	if !in.OffersBounty {
@@ -526,9 +552,9 @@ func (in *Intake) Markdown() string {
 	}
 
 	if len(in.Candidates) > 0 {
-		b.WriteString("## Candidate hosts from prose (unverified)\n\n")
-		b.WriteString("Found near an in-scope heading. Check the source before using them — ")
-		b.WriteString("`bountykit intake <url> --trust-scope` promotes them to `scope.txt`.\n\n")
+		b.WriteString("## Candidates from prose (unverified)\n\n")
+		b.WriteString("SYSTEM entries are named systems from an impact-based scope, **not hostnames**. ")
+		b.WriteString("Only real hosts are promoted by `--trust-scope`; system names become hints in `next`.\n\n")
 		for _, c := range in.Candidates {
 			fmt.Fprintf(&b, "- `%s` (%s, section: %s)\n", c.Identifier, c.Type, dash(c.Section))
 		}
