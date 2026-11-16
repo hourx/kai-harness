@@ -1,0 +1,8 @@
+# state per program — never commit target data
+data/
+dist/
+*.zip
+.DS_Store
+
+# build output
+/bin/

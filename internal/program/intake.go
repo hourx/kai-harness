@@ -1,0 +1,438 @@
+// Package program turns a public program page into Phase 0 intake data: what
+// it pays, how crowded it is, and which scope rules are safe to automate.
+//
+// It is deliberately read-only. Nothing here submits a report or touches a
+// target asset; the only requests go to the platform's public directory API.
+package program
+
+import (
+	"fmt"
+	"net"
+	"net/url"
+	"sort"
+	"strings"
+	"time"
+)
+
+// Asset is one entry from a platform's structured scope.
+type Asset struct {
+	Identifier  string `json:"identifier"`
+	Type        string `json:"type"`
+	HumanType   string `json:"human_type,omitempty"`
+	Eligible    bool   `json:"eligible_for_submission"`
+	Bounty      bool   `json:"eligible_for_bounty"`
+	MaxSeverity string `json:"max_severity,omitempty"`
+	Instruction string `json:"instruction,omitempty"`
+}
+
+// BountyRow is one severity-based reward band.
+type BountyRow struct {
+	Name     string `json:"name"`
+	Low      int    `json:"low"`
+	Medium   int    `json:"medium"`
+	High     int    `json:"high"`
+	Critical int    `json:"critical"`
+	Minimums [4]int `json:"minimums"`
+}
+
+// SeverityStat is the platform's own paid-report statistics.
+type SeverityStat struct {
+	Average float64 `json:"average"`
+	Count   int     `json:"count"`
+}
+
+// Intake is everything Phase 0 can learn without logging in.
+type Intake struct {
+	Platform      string                  `json:"platform"`
+	Handle        string                  `json:"handle"`
+	Name          string                  `json:"name"`
+	URL           string                  `json:"url"`
+	Website       string                  `json:"website,omitempty"`
+	State         string                  `json:"state,omitempty"`
+	Submission    string                  `json:"submission_state,omitempty"`
+	OffersBounty  bool                    `json:"offers_bounties"`
+	Currency      string                  `json:"currency,omitempty"`
+	Base          int                     `json:"base_bounty,omitempty"`
+	Minimum       int                     `json:"minimum_bounty,omitempty"`
+	TopLower      int                     `json:"top_bounty_lower,omitempty"`
+	TopUpper      int                     `json:"top_bounty_upper,omitempty"`
+	AverageLower  int                     `json:"average_bounty_lower,omitempty"`
+	AverageUpper  int                     `json:"average_bounty_upper,omitempty"`
+	Resolved      int                     `json:"resolved_reports"`
+	Reports90d    int                     `json:"reports_received_90d"`
+	ResponseEff   float64                 `json:"response_efficiency_pct"`
+	BountyRows    []BountyRow             `json:"bounty_rows,omitempty"`
+	SeverityStats map[string]SeverityStat `json:"severity_stats,omitempty"`
+	Assets        []Asset                 `json:"assets,omitempty"`
+	Scorecard     Score                   `json:"scorecard,omitempty"`
+	Policy        string                  `json:"-"`
+	FetchedAt     time.Time               `json:"fetched_at"`
+}
+
+// Score is the Phase 0 recommendation. Each component is independent so the
+// operator can disagree with the weighting without losing the raw numbers.
+type Score struct {
+	Total    int      `json:"total"`
+	Verdict  string   `json:"verdict"`
+	Money    int      `json:"money"`
+	Crowding int      `json:"crowding"`
+	Speed    int      `json:"speed"`
+	Surface  int      `json:"surface"`
+	Reasons  []string `json:"reasons"`
+}
+
+// Scope holds the rules derived from structured scope, plus what could not be
+// represented in a host-only gate.
+type Scope struct {
+	In       []string `json:"in"`
+	Out      []string `json:"out"`
+	PathOnly []Asset  `json:"path_scoped"`
+	NonWeb   []Asset  `json:"non_web"`
+}
+
+// Scope converts structured assets into rules the gate can enforce.
+//
+// An asset with a URL path is deliberately NOT emitted: scope.txt only
+// understands hosts, and silently widening "example.com/api/*" to the whole
+// host would let recon touch paths the program never authorised.
+func (in *Intake) Scope() Scope {
+	var s Scope
+	for _, a := range in.Assets {
+		rule, kind := normalizeRule(a)
+		if kind == "path" {
+			s.PathOnly = append(s.PathOnly, a)
+			continue
+		}
+		if kind == "non-web" || kind == "unparsed" {
+			s.NonWeb = append(s.NonWeb, a)
+			continue
+		}
+		if rule == "" {
+			continue
+		}
+		if a.Eligible {
+			s.In = append(s.In, rule)
+		} else {
+			s.Out = append(s.Out, rule)
+		}
+	}
+	s.In = uniq(s.In)
+	s.Out = uniq(s.Out)
+	sort.Strings(s.In)
+	sort.Strings(s.Out)
+	return s
+}
+
+// normalizeRule returns a scope rule and its kind: host, wildcard, cidr,
+// path (host plus an unrepresentable path), non-web, or unparsed.
+func normalizeRule(a Asset) (rule, kind string) {
+	id := strings.TrimSpace(a.Identifier)
+	if id == "" {
+		return "", "unparsed"
+	}
+	switch strings.ToUpper(a.Type) {
+	case "CIDR", "IP_ADDRESS", "IP", "IPV4", "IPV6":
+		return strings.TrimSuffix(id, "."), "cidr"
+	case "WILDCARD":
+		id = strings.TrimPrefix(id, "*.")
+		host, path := splitHost(id)
+		if host == "" {
+			return "", "unparsed"
+		}
+		if path != "" {
+			return "", "path"
+		}
+		return "*." + host, "wildcard"
+	case "URL", "URL_PATH", "HOST", "DOMAIN", "HOSTNAME":
+		host, path := splitHost(id)
+		if host == "" {
+			return "", "unparsed"
+		}
+		if path != "" {
+			return "", "path"
+		}
+		if strings.HasPrefix(host, "*.") {
+			return host, "wildcard"
+		}
+		return host, "host"
+	default:
+		return "", "non-web"
+	}
+}
+
+func splitHost(raw string) (string, string) {
+	raw = strings.TrimSpace(raw)
+	path := ""
+	if strings.Contains(raw, "://") {
+		u, err := url.Parse(raw)
+		if err != nil {
+			return "", ""
+		}
+		raw = u.Host
+		path = u.Path
+	} else if i := strings.IndexAny(raw, "/?:"); i >= 0 {
+		// ":" is handled below for ports; only treat it as a separator when
+		// the remainder is not a port number.
+		if raw[i] != ':' {
+			path, raw = raw[i:], raw[:i]
+		}
+	}
+	if h, _, err := net.SplitHostPort(raw); err == nil {
+		raw = h
+	}
+	raw = strings.TrimSuffix(strings.ToLower(strings.TrimSpace(raw)), ".")
+	if raw == "" || strings.ContainsAny(raw, " \t") {
+		return "", ""
+	}
+	if path == "/" {
+		path = ""
+	}
+	return raw, path
+}
+
+func uniq(in []string) []string {
+	seen := map[string]struct{}{}
+	out := make([]string, 0, len(in))
+	for _, v := range in {
+		if _, ok := seen[v]; ok {
+			continue
+		}
+		seen[v] = struct{}{}
+		out = append(out, v)
+	}
+	return out
+}
+
+// Score produces the Phase 0 recommendation.
+func (in *Intake) Score() Score {
+	s := Score{}
+	reasons := []string{}
+
+	// Money: 0-25. The ceiling matters more than the floor for a first bug.
+	switch {
+	case in.TopUpper >= 50000:
+		s.Money = 25
+	case in.TopUpper >= 20000:
+		s.Money = 21
+	case in.TopUpper >= 10000:
+		s.Money = 17
+	case in.TopUpper >= 5000:
+		s.Money = 12
+	case in.TopUpper > 0:
+		s.Money = 7
+	}
+	if !in.OffersBounty {
+		s.Money = 0
+		reasons = append(reasons, "no monetary rewards — VDP only; do not rank it like a bounty program")
+	} else if in.TopUpper > 0 {
+		reasons = append(reasons, fmt.Sprintf("reward ceiling %s, typical band %s–%s", money(in.TopUpper), money(in.AverageLower), money(in.AverageUpper)))
+	}
+
+	// Crowding: 0-35. Reports per 90 days is the closest public proxy for
+	// how many hunters are already walking the same paths.
+	switch {
+	case in.Reports90d == 0:
+		s.Crowding = 35
+	case in.Reports90d <= 50:
+		s.Crowding = 35
+	case in.Reports90d <= 150:
+		s.Crowding = 29
+	case in.Reports90d <= 400:
+		s.Crowding = 21
+	case in.Reports90d <= 1000:
+		s.Crowding = 12
+	case in.Reports90d <= 2500:
+		s.Crowding = 6
+	default:
+		s.Crowding = 0
+	}
+	if in.Reports90d > 0 {
+		reasons = append(reasons, fmt.Sprintf("%d reports in 90 days — crowded", in.Reports90d))
+		if in.Reports90d > 400 {
+			reasons[len(reasons)-1] += "; duplicates are likely unless you find new surface"
+		}
+	}
+
+	// Speed: 0-20.
+	s.Speed = int(float64(in.ResponseEff) / 100 * 20)
+	if in.ResponseEff > 0 {
+		reasons = append(reasons, fmt.Sprintf("response efficiency %.0f%%", in.ResponseEff))
+	}
+
+	// Surface: 0-20. Wildcards and mobile widen the hunt; a huge flat scope
+	// is not automatically better because nobody can cover it in depth.
+	sc := in.Scope()
+	web := len(sc.In)
+	var hasWildcard, hasMobile bool
+	for _, a := range in.Assets {
+		if !a.Eligible {
+			continue
+		}
+		if strings.EqualFold(a.Type, "WILDCARD") || strings.HasPrefix(a.Identifier, "*.") {
+			hasWildcard = true
+		}
+		if strings.Contains(strings.ToUpper(a.Type), "APP") || strings.Contains(strings.ToUpper(a.Type), "STORE") {
+			hasMobile = true
+		}
+	}
+	switch {
+	case web == 0:
+		s.Surface = 0
+	case web <= 4:
+		s.Surface = 8
+	case web <= 20:
+		s.Surface = 14
+	case web <= 100:
+		s.Surface = 18
+	default:
+		s.Surface = 16
+	}
+	if hasWildcard {
+		s.Surface += 2
+	}
+	if hasMobile {
+		s.Surface += 1
+	}
+	if s.Surface > 20 {
+		s.Surface = 20
+	}
+	if web > 0 {
+		reasons = append(reasons, fmt.Sprintf("%d enforceable in-scope rules", web))
+	} else {
+		reasons = append(reasons, "no host-level scope rules — read policy.md before touching anything")
+	}
+	if hasWildcard {
+		reasons = append(reasons, "wildcard scope: subdomain discovery is worth running")
+	} else if web > 0 {
+		reasons = append(reasons, "exact hosts only: subdomain enumeration will add nothing in scope")
+	}
+	if len(sc.PathOnly) > 0 {
+		reasons = append(reasons, fmt.Sprintf("%d path-scoped asset(s) excluded from scope.txt — host gate would be too broad", len(sc.PathOnly)))
+	}
+	if len(in.Assets) == 0 {
+		reasons = append(reasons, "no structured scope published; the full scope is in the policy text")
+	}
+
+	s.Total = s.Money + s.Crowding + s.Speed + s.Surface
+	switch {
+	case !in.OffersBounty:
+		s.Verdict = "vdp-only"
+	case s.Total >= 70:
+		s.Verdict = "go"
+	case s.Total >= 50:
+		s.Verdict = "careful"
+	default:
+		s.Verdict = "skip"
+	}
+	s.Reasons = reasons
+	return s
+}
+
+func money(n int) string {
+	if n >= 1000 {
+		return fmt.Sprintf("$%dk", n/1000)
+	}
+	return fmt.Sprintf("$%d", n)
+}
+
+// Markdown is the Phase 0 scorecard the operator reads.
+func (in *Intake) Markdown() string {
+	var b strings.Builder
+	sc := in.Scope()
+	s := in.Score()
+	fmt.Fprintf(&b, "# Phase 0 — %s (%s)\n\n", in.Name, in.Platform)
+	fmt.Fprintf(&b, "**Verdict: %s — %d/100**\n\n", s.Verdict, s.Total)
+	fmt.Fprintf(&b, "| money | crowding | speed | surface |\n| ---: | ---: | ---: | ---: |\n| %d/25 | %d/35 | %d/20 | %d/20 |\n\n",
+		s.Money, s.Crowding, s.Speed, s.Surface)
+	fmt.Fprintf(&b, "%s\n\n", in.URL)
+	fmt.Fprintf(&b, "Fetched %s · state `%s` · submission `%s` · website %s\n\n",
+		in.FetchedAt.Format(time.RFC3339), in.State, in.Submission, dash(in.Website))
+
+	b.WriteString("## Why this score\n\n")
+	for _, r := range s.Reasons {
+		fmt.Fprintf(&b, "- %s\n", r)
+	}
+	b.WriteString("\n")
+
+	b.WriteString("## Rewards\n\n")
+	if in.OffersBounty {
+		fmt.Fprintf(&b, "| | low | medium | high | critical |\n| --- | ---: | ---: | ---: | ---: |\n")
+		if len(in.BountyRows) == 0 {
+			fmt.Fprintf(&b, "| reward | %s | %s | %s | %s |\n", money(in.AverageLower), money(in.AverageLower), money(in.AverageUpper), money(in.TopUpper))
+		} else {
+			for _, row := range in.BountyRows {
+				fmt.Fprintf(&b, "| %s | %s | %s | %s | %s |\n", dash(row.Name),
+					money(row.Low), money(row.Medium), money(row.High), money(row.Critical))
+				fmt.Fprintf(&b, "| %s min | %s | %s | %s | %s |\n", dash(row.Name),
+					money(row.Minimums[0]), money(row.Minimums[1]), money(row.Minimums[2]), money(row.Minimums[3]))
+			}
+		}
+		fmt.Fprintf(&b, "\nBase %s · minimum %s · top %s–%s · average %s–%s · %s\n\n",
+			money(in.Base), money(in.Minimum), money(in.TopLower), money(in.TopUpper),
+			money(in.AverageLower), money(in.AverageUpper), in.Currency)
+	} else {
+		b.WriteString("No bounty table — this program awards recognition, not money.\n\n")
+	}
+
+	if len(in.SeverityStats) > 0 {
+		b.WriteString("## Where reports land\n\n| severity | paid reports | average |\n| --- | ---: | ---: |\n")
+		for _, k := range []string{"critical", "high", "medium", "low"} {
+			if st, ok := in.SeverityStats[k]; ok {
+				fmt.Fprintf(&b, "| %s | %d | %s |\n", k, st.Count, money(int(st.Average)))
+			}
+		}
+		fmt.Fprintf(&b, "\n%d reports resolved in total, %d received in the last 90 days.\n\n", in.Resolved, in.Reports90d)
+	}
+
+	b.WriteString("## Scope derived from the platform\n\n")
+	fmt.Fprintf(&b, "- %d in-scope host rules\n- %d out-of-scope host rules\n- %d path-scoped assets excluded (host gate would be too broad)\n- %d non-web assets (apps, source, hardware)\n\n",
+		len(sc.In), len(sc.Out), len(sc.PathOnly), len(sc.NonWeb))
+	if len(sc.In) > 0 {
+		b.WriteString("In scope:\n\n")
+		for _, r := range sc.In {
+			fmt.Fprintf(&b, "- `%s`\n", r)
+		}
+		b.WriteString("\n")
+	}
+	if len(sc.Out) > 0 {
+		b.WriteString("Out of scope:\n\n")
+		for _, r := range sc.Out {
+			fmt.Fprintf(&b, "- `%s`\n", r)
+		}
+		b.WriteString("\n")
+	}
+	if len(sc.NonWeb) > 0 {
+		b.WriteString("In scope but not host-based — track these separately:\n\n")
+		for _, a := range sc.NonWeb {
+			fmt.Fprintf(&b, "- `%s` (%s)%s\n", a.Identifier, a.Type, bountyMark(a))
+		}
+		b.WriteString("\n")
+	}
+	if len(sc.PathOnly) > 0 {
+		b.WriteString("Path-restricted — read the policy before testing:\n\n")
+		for _, a := range sc.PathOnly {
+			fmt.Fprintf(&b, "- `%s`\n", a.Identifier)
+		}
+		b.WriteString("\n")
+	}
+
+	b.WriteString("## Read before testing\n\n")
+	b.WriteString("`policy.md` holds the full program policy: out-of-scope vulnerability classes, ")
+	b.WriteString("required research headers, account rules and disclosure terms. ")
+	b.WriteString("The host gate cannot enforce any of those.\n")
+	return b.String()
+}
+
+func bountyMark(a Asset) string {
+	if a.Bounty {
+		return " — bounty eligible"
+	}
+	return ""
+}
+
+func dash(s string) string {
+	if s == "" {
+		return "—"
+	}
+	return s
+}
