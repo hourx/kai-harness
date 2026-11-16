@@ -76,6 +76,9 @@ func looksLikeEndpoint(path string) bool {
 	if path == "" || !strings.HasPrefix(path, "/") || strings.Contains(path, "//") {
 		return false
 	}
+	if strings.HasPrefix(strings.ToLower(path), "/cdn-cgi/") {
+		return false // Cloudflare challenge artifacts, not app endpoints
+	}
 	letters := 0
 	for _, r := range path {
 		if r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' {
