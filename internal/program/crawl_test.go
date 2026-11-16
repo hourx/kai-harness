@@ -28,8 +28,18 @@ func TestHostsFromReferencedPage(t *testing.T) {
 	if len(got) != 1 || got[0].Identifier != "testnet.ticko.xyz" {
 		t.Errorf("hosts = %+v, want only testnet.ticko.xyz", got)
 	}
+	if got[0].Path != "" {
+		t.Errorf("root URL must not be treated as path-restricted: %+v", got[0])
+	}
 	if got[0].Type != "HOST" || got[0].Section != "Testnet Guide" {
 		t.Errorf("candidate metadata = %+v", got[0])
+	}
+
+	// Regression: --trust-scope must promote this root host into scope.txt.
+	in := &Intake{TrustScope: true, Candidates: got}
+	sc := in.Scope()
+	if len(sc.In) != 1 || sc.In[0] != "testnet.ticko.xyz" {
+		t.Errorf("trusted scope = %v, want [testnet.ticko.xyz]", sc.In)
 	}
 }
 

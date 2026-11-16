@@ -153,7 +153,7 @@ func (in *Intake) Scope() Scope {
 	sort.Strings(s.Out)
 	if in.TrustScope {
 		for _, c := range in.Candidates {
-			if c.Host == "" || c.Path != "" || strings.Contains(strings.ToLower(c.Section), "out of scope") {
+			if c.Host == "" || (c.Path != "" && c.Path != "/") || strings.Contains(strings.ToLower(c.Section), "out of scope") {
 				continue
 			}
 			rule := c.Host

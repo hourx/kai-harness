@@ -139,8 +139,12 @@ func hostsFromText(text, section string) []Candidate {
 		if seen[host] {
 			return
 		}
+		path := u.Path
+		if path == "/" {
+			path = ""
+		}
 		seen[host] = true
-		out = append(out, Candidate{Identifier: host, Host: host, Path: u.Path, Type: "HOST", Section: section})
+		out = append(out, Candidate{Identifier: host, Host: host, Path: path, Type: "HOST", Section: section})
 	}
 	for _, raw := range urlRE.FindAllString(text, -1) {
 		add(raw)
