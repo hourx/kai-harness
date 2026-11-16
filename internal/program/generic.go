@@ -176,6 +176,7 @@ func FetchWeb(ctx context.Context, c *netx.Client, raw string) (*Intake, error) 
 	in.Assets = extractContractAssets(policy)
 	in.Candidates = extractCandidates(policy)
 	in.Constraints = extractConstraints(policy)
+	in.Boundaries = ExtractBoundaries(policy, in.Confidence)
 	in.Scorecard = in.Score()
 	return in, nil
 }

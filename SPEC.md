@@ -1,4 +1,4 @@
-# bountykit — SPEC v0.5
+# bountykit — SPEC v0.6
 
 Deterministic context-pack builder for bug bounty.
 Fase yang dikerjakan tool: **Program Selection (bantu) → Pre-Hunt (kumpulkan) → Recon → Mapping**.
@@ -47,8 +47,10 @@ Bukti dari dua repo yang ada:
 - confidence `structured` vs `heuristic`; verdict `review` untuk hasil heuristic
 
 ### Dikerjakan v0.6
+- `boundaries` — dokumen tunggal berisi aturan, batasan, dan kutipan verbatim in/out-of-scope
+
+### Dikerjakan v0.7
 - `report` — laporan markdown/HTML per program
-- adapter penuh (katana, smuggling check)
 
 ### Bukan scope (selamanya)
 - Hunting otomatis (itu tugas Kairos + skill `hunt-*`)
@@ -84,6 +86,7 @@ workspace/<program>/
 ├── program.md
 ├── scope.txt
 ├── out-of-scope.txt
+├── boundaries.md
 ├── passive/
 ├── recon/
 ├── evidence/
@@ -197,6 +200,7 @@ data/<program>/
 ├── out-of-scope.txt
 ├── audit.log
 ├── intake.json       data Phase 0 + scorecard (terstruktur)
+├── boundaries.md     aturan + batasan + kutipan verbatim in/out-of-scope
 ├── policy.md         kebijakan program (class out-of-scope, header wajib)
 ├── session.json      cookie + header (0600, tidak ikut pack kecuali diminta)
 ├── assets.json       hosts, endpoints, JS hash (dengan first_seen/last_seen)
@@ -238,6 +242,7 @@ Batas bawah: item `surface-review` dengan skor < 30 dibuang. Kalau tidak ada yan
     ├── program.md
     ├── scope.txt
     ├── out-of-scope.txt
+    ├── boundaries.md          ← aturan + batasan, kutipan verbatim
     ├── policy.md              ← aturan program yang bukan host
     ├── LEDGER.md              ← log keputusan tool
     ├── recon/                 ← hanya file yang ada
@@ -302,6 +307,7 @@ v0.4:
 
 ```
 bountykit intake <hackerone-url|handle> [--name slug] [--dry-run] [--force]
+bountykit boundaries <program>                   # aturan + batasan + verbatim
 bountykit intake <url> [--name slug] [--dry-run] [--force] [--trust-scope]
 ```
 
@@ -324,6 +330,7 @@ bountykit report <program>
 7. `intake` hanya membaca API publik platform: tidak login, tidak menyentuh aset target.
 8. Aset berskope path tidak pernah dilebarkan jadi aturan host.
 9. Host dari teks halaman tetap jadi kandidat sampai operator memverifikasi dan memakai `--trust-scope`.
+10. Aturan yang tidak dipublikasikan = `unknown` / "not stated", bukan izin. Kutipan out-of-scope wajib masuk `boundaries.md` apa adanya.
 
 ---
 
@@ -334,5 +341,5 @@ bountykit report <program>
 | v0.1 | `init`, `scope`, `pack`, `status` | ZIP bisa dibuat, gate identik dengan Kairos (diuji), agent bisa membaca BRIEF |
 | v0.2 | `recon`, `diff`, snapshot | Satu run menghasilkan `subs/live/urls/js/endpoints`; diff terisi — **selesai** |
 | v0.3 | `map`, `next`, session import | Antrian tes terurut + hipotesis per kelas vuln, permukaan auth ikut terpetakan — **selesai** |
-| v0.5 | multi-source intake | H1 terstruktur + 5 sumber teks; verdict `review` untuk heuristic — **selesai** |
-| v0.6 | `report`, adapter penuh | Laporan markdown/HTML per program |
+| v0.6 | `boundaries` | aturan + batasan + kutipan verbatim, missing = unknown — **selesai** |
+| v0.7 | `report`, adapter penuh | Laporan markdown/HTML per program |

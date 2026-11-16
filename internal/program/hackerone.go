@@ -221,7 +221,7 @@ func FetchHackerOne(ctx context.Context, c *netx.Client, handle string) (*Intake
 		Reports90d:   num(t.Reports90d),
 		ReportsKnown: true,
 		ResponseEff:  flt(t.ResponseEff),
-		Policy:       str(t.Policy),
+		Policy:       mdHeadingRE.ReplaceAllString(str(t.Policy), "## "),
 		FetchedAt:    time.Now().UTC(),
 	}
 	if in.Name == "" {
@@ -290,6 +290,10 @@ func FetchHackerOne(ctx context.Context, c *netx.Client, handle string) (*Intake
 		after = sc.PageInfo.EndCursor
 	}
 	in.Scorecard = in.Score()
+	if in.Policy != "" {
+		in.Boundaries = ExtractBoundaries(in.Policy, "structured")
+		in.Boundaries.ScopeIsStructured = len(in.Assets) > 0
+	}
 	return in, nil
 }
 

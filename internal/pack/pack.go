@@ -107,7 +107,7 @@ func Build(p *workspace.Program, opts Options) (Result, error) {
 		return add(name, b)
 	}
 
-	for _, name := range []string{"program.md", "scope.txt", "out-of-scope.txt", "policy.md"} {
+	for _, name := range []string{"program.md", "scope.txt", "out-of-scope.txt", "policy.md", "boundaries.md"} {
 		if _, err := os.Stat(filepath.Join(p.Dir, name)); err != nil {
 			continue
 		}
@@ -290,6 +290,15 @@ func brief(p *workspace.Program, now time.Time, opts Options) string {
 			Surface  int      `json:"surface"`
 			Reasons  []string `json:"reasons"`
 		} `json:"scorecard"`
+		Boundaries struct {
+			MainnetTesting     string   `json:"mainnet_testing"`
+			TestingEnvironment string   `json:"testing_environment"`
+			PoCRequired        bool     `json:"poc_required"`
+			KYCRequired        bool     `json:"kyc_required"`
+			DepositRequired    bool     `json:"deposit_required"`
+			RequiredHeaders    []string `json:"required_headers"`
+			Notes              []string `json:"notes"`
+		} `json:"boundaries"`
 	}
 	if err == nil && json.Unmarshal(rawIntake, &pi) == nil && pi.Scorecard.Verdict != "" {
 		sc := pi.Scorecard
@@ -305,6 +314,29 @@ func brief(p *workspace.Program, now time.Time, opts Options) string {
 	} else {
 		b.WriteString("No Phase 0 intake for this program. Run `bountykit intake <hackerone-url>` ")
 		b.WriteString("before choosing what to hunt — payout, crowding and published scope all matter.\n\n")
+	}
+
+	if bd := pi.Boundaries; bd.MainnetTesting != "" {
+		b.WriteString("## Boundaries (read first)\n\n")
+		fmt.Fprintf(&b, "- mainnet/live testing: **%s** (environment: %s)\n", bd.MainnetTesting, dash(bd.TestingEnvironment))
+		fmt.Fprintf(&b, "- PoC: %s · KYC: %s · deposit: %s\n", yesNo(pi.Boundaries.PoCRequired), yesNo(pi.Boundaries.KYCRequired), yesNo(pi.Boundaries.DepositRequired))
+		if len(bd.RequiredHeaders) > 0 {
+			fmt.Fprintf(&b, "- required headers: `%s`\n", strings.Join(bd.RequiredHeaders, "`, `"))
+		}
+		for i, n := range bd.Notes {
+			if i >= 4 {
+				break
+			}
+			if strings.HasPrefix(n, "research headers required:") && len(bd.RequiredHeaders) > 0 {
+				continue
+			}
+			fmt.Fprintf(&b, "- %s\n", n)
+		}
+		b.WriteString("\nFull limits and verbatim out-of-scope text: `boundaries.md`.\n\n")
+	} else {
+		b.WriteString("## Boundaries (read first)\n\n")
+		b.WriteString("No structured boundaries were extracted. Treat this as unknown, not as permission. ")
+		b.WriteString("Read `policy.md` and `boundaries.md` before any request.\n\n")
 	}
 
 	b.WriteString("## Scope (authoritative)\n\n")
@@ -403,6 +435,20 @@ func brief(p *workspace.Program, now time.Time, opts Options) string {
 func sessionExists(p *workspace.Program) bool {
 	_, err := os.Stat(filepath.Join(p.Dir, "session.json"))
 	return err == nil
+}
+
+func yesNo(v bool) string {
+	if v {
+		return "yes"
+	}
+	return "not stated"
+}
+
+func dash(s string) string {
+	if s == "" {
+		return "—"
+	}
+	return s
 }
 
 func readOr(p *workspace.Program, name string) string {

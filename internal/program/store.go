@@ -27,6 +27,9 @@ func Apply(p *workspace.Program, in *Intake) error {
 	if err := write(filepath.Join(p.Dir, "program.md"), []byte(in.Markdown())); err != nil {
 		return err
 	}
+	if err := write(filepath.Join(p.Dir, "boundaries.md"), []byte(in.BoundariesMarkdown())); err != nil {
+		return err
+	}
 	if in.Policy != "" {
 		if err := write(filepath.Join(p.Dir, "policy.md"), []byte(strings.TrimSpace(in.Policy)+"\n")); err != nil {
 			return err
@@ -66,7 +69,8 @@ func Apply(p *workspace.Program, in *Intake) error {
 
 	var out strings.Builder
 	fmt.Fprintf(&out, "# Out of scope — imported from %s\n", in.URL)
-	fmt.Fprintln(&out, "# Out-of-scope vulnerability classes and required headers live in policy.md.")
+	fmt.Fprintln(&out, "# Host rules only. Vulnerability classes, prohibited actions and headers")
+	fmt.Fprintln(&out, "# are in boundaries.md and policy.md — a host gate cannot enforce them.")
 	fmt.Fprintln(&out, "# Host rules here come only from the platform's structured scope.")
 	for _, r := range sc.Out {
 		fmt.Fprintln(&out, r)

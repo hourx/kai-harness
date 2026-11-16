@@ -35,6 +35,7 @@ Go 1.21+. No cgo, no third-party modules.
 # 1. Phase 0 — read the public program page (HackerOne today)
 bountykit intake 'https://hackerone.com/temu?type=team' --dry-run   # scorecard only
 bountykit intake temu                              # create workspace + scope + policy
+bountykit boundaries temu                          # aturan, batasan, out-of-scope (verbatim)
 
 # 2. fill in / verify scope (intake writes what the platform publishes)
 $EDITOR data/temu/scope.txt data/temu/out-of-scope.txt
@@ -106,8 +107,15 @@ Scope is derived conservatively:
 | app ID / contract / source / hardware | listed in the scorecard, never guessed as a host |
 
 Out-of-scope rules from the platform are written to `out-of-scope.txt`. Rules
-that cannot be expressed as hosts (vulnerability classes, required headers)
-stay in `policy.md` and are called out in the handoff brief.
+that cannot be expressed as hosts stay in `policy.md`.
+
+`boundaries.md` is the single authoritative "what may I touch" document:
+enforceable IN/OUT host rules, path-restricted and non-web assets, mainnet /
+test policy, PoC/KYC/deposit, required research headers, and **verbatim**
+in-scope, out-of-scope, prohibited, eligibility, submission and disclosure
+excerpts. `bountykit boundaries <program>` prints it; it is also in the ZIP and
+summarised at the top of `BRIEF.md`. Anything not published is rendered as
+"unknown / not stated", never as "allowed".
 
 ## Scope semantics
 
@@ -128,8 +136,8 @@ Every decision is appended to `data/<program>/audit.log`.
 ```
 data/<program>/          state (gitignored)
   meta.json
-  scope.txt  out-of-scope.txt  program.md  policy.md
-  intake.json            structured Phase 0 data + scorecard
+  scope.txt  out-of-scope.txt  program.md  policy.md  boundaries.md
+  intake.json            structured Phase 0 data + scorecard + boundaries
   audit.log
   session.json           cookies + headers, mode 0600, never packed by default
   assets.json            hosts, endpoints, JS hashes + first_seen/last_seen
@@ -146,7 +154,7 @@ dist/<program>_<ts>.zip  handoff archive
     recon/               what bugbounty-pipeline already reads
     bountykit/
       MANIFEST.json      files + sha256
-      intake.json        Phase 0 data
+      intake.json        Phase 0 data + boundaries
       diff.md            what is new
       map.md  map.json   surface map
       next.md  next.json ranked queue
@@ -164,7 +172,8 @@ dist/<program>_<ts>.zip  handoff archive
 | v0.3 | `map`, `next`, session import — done |
 | v0.4 | `intake` (Phase 0), exact-host recon — done |
 | v0.5 | multi-source intake (H1, Cantina, Immunefi, GitBook, self-hosted) |
-| v0.6 | `report`, full adapters |
+| v0.6 | `boundaries` — structured limits + verbatim out-of-scope |
+| v0.7 | `report`, full adapters |
 
 ## Rules
 
@@ -175,3 +184,4 @@ dist/<program>_<ts>.zip  handoff archive
 5. `intake` reads public pages only. Never log in, never touch a target asset.
 6. Path-scoped platform assets are never widened into host rules.
 7. A host found in prose stays a candidate until the operator verifies it and passes `--trust-scope`.
+8. Missing rules are `unknown` / "not stated". Absence of a prohibition is never treated as permission.

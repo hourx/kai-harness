@@ -34,6 +34,7 @@ Commands:
                                                              create workspace
   intake  <url|handle> [--name slug] [--dry-run] [--force] [--trust-scope]
                                                              Phase 0: read program
+  boundaries <program>                                      print scope limits & rules
   scope   <program> <host|cidr>                              scope gate (IN/OUT)
   recon   <program> [--domain d] [--rps N] [--max-hosts N]
                     [--max-bundles N] [--nuclei] [--no-session] [--step]
@@ -74,6 +75,8 @@ func Run(args []string) int {
 		return cmdIntake(args[1:])
 	case "scope":
 		return cmdScope(args[1:])
+	case "boundaries":
+		return cmdBoundaries(args[1:])
 	case "recon":
 		return cmdRecon(args[1:])
 	case "session":
@@ -238,6 +241,22 @@ func cmdInit(args []string) int {
 	fmt.Printf("created  %s\n", p.Dir)
 	fmt.Printf("next     edit %s/scope.txt and %s/out-of-scope.txt\n", p.Dir, p.Dir)
 	fmt.Printf("         bountykit scope %s <host>   # gate must pass before any request\n", p.Name)
+	return 0
+}
+
+func cmdBoundaries(args []string) int {
+	if len(args) != 1 {
+		return fail(errors.New("usage: bountykit boundaries <program>"))
+	}
+	p, err := workspace.Open(args[0])
+	if err != nil {
+		return fail(err)
+	}
+	b, err := os.ReadFile(filepath.Join(p.Dir, "boundaries.md"))
+	if err != nil {
+		return fail(fmt.Errorf("no boundaries yet — run: bountykit intake <url> --name %s", p.Name))
+	}
+	fmt.Print(string(b))
 	return 0
 }
 
