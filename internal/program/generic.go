@@ -114,18 +114,25 @@ func FetchWeb(ctx context.Context, c *netx.Client, raw string) (*Intake, error) 
 	platform, _ := DetectPlatform(u.String())
 	pageURL := u.String()
 	fetchURL := pageURL
-
 	var policy string
-	if platform == "gitbook" {
-		fetchURL = strings.TrimSuffix(pageURL, "/") + ".md"
-	}
+
 	resp, err := c.Get(ctx, fetchURL, 2<<20)
 	if err != nil {
 		return nil, err
 	}
 	status, body := resp.StatusCode, resp.Body
-	// bugbounty.meta.com answers 400 with a full HTML document. Accept that
-	// one case, but never silence a real failure.
+	// GitBook is often served from a custom domain (docs.ticko.xyz), so the
+	// hostname alone is not enough. Its HTML is a shell; the real policy is
+	// published as Markdown beside the page.
+	if platform != "gitbook" && strings.Contains(strings.ToLower(string(body)), "gitbook") &&
+		!strings.HasSuffix(strings.ToLower(fetchURL), ".md") {
+		mdURL := strings.TrimSuffix(fetchURL, "/") + ".md"
+		if mdResp, mdErr := c.Get(ctx, mdURL, 2<<20); mdErr == nil && mdResp.StatusCode == 200 && len(mdResp.Body) > 300 {
+			platform = "gitbook"
+			fetchURL = mdURL
+			status, body = mdResp.StatusCode, mdResp.Body
+		}
+	}
 	if platform == "meta" && status == 400 && len(body) > 1000 {
 		// accepted with a caveat recorded below
 	} else if status != 200 {
@@ -143,12 +150,12 @@ func FetchWeb(ctx context.Context, c *netx.Client, raw string) (*Intake, error) 
 	}
 
 	name := pageTitle(body, policy)
-	if platform == "gitbook" || strings.EqualFold(name, "program") || name == "" {
-		// GitBook page titles are generic ("Bug bounty program"); the host
-		// identifies the project more usefully.
+	if name == "" || strings.EqualFold(name, "program") || strings.EqualFold(name, "bug bounty program") {
+		// A generic page title ("Bug bounty program") is less useful than
+		// the project name in the hostname. Keep real titles as they are.
 		host := strings.ToLower(u.Hostname())
 		parts := strings.Split(host, ".")
-		if platform == "gitbook" && len(parts) > 2 {
+		if strings.HasSuffix(host, ".gitbook.io") && len(parts) > 2 {
 			name = parts[0] // hyperliquid.gitbook.io → hyperliquid
 		} else if len(parts) > 1 {
 			name = parts[len(parts)-2]
@@ -174,7 +181,7 @@ func FetchWeb(ctx context.Context, c *netx.Client, raw string) (*Intake, error) 
 	in.TopUpper, in.BountyRows = extractRewards(policy)
 	in.Resolved, in.Reports90d, in.ReportsKnown = extractCounters(policy)
 	in.Assets = extractContractAssets(policy)
-	in.Candidates = extractCandidates(policy)
+	in.Candidates = append(extractCandidates(policy), extractSystems(policy)...)
 	in.Constraints = extractConstraints(policy)
 	in.Boundaries = ExtractBoundaries(policy, in.Confidence)
 	in.PolicyHash = hashPolicy(policy)
@@ -194,6 +201,37 @@ var fileExt = map[string]bool{
 	"sol": true, "js": true, "ts": true, "md": true, "go": true, "py": true,
 	"json": true, "pdf": true, "png": true, "jpg": true, "html": true,
 	"css": true, "tsx": true, "rs": true, "yml": true, "yaml": true,
+}
+
+var systemRE = regexp.MustCompile(`(?i)\b(core|nodes?|APIs?|VM|order book|session keys?|signatures?|contracts?|settlement|liquidation|margin|oracle|testnet|mainnet|wallet|engine|chain|ledger|servers?)\b`)
+
+// extractSystems finds named systems in an impact-based scope section. Such
+// programs have no host list, but they still define a testable surface: the
+// VM, node APIs, session keys, settlement logic and so on.
+func extractSystems(policy string) []Candidate {
+	text := strings.Join(strings.Fields(plain(sections(policy, "in scope", "assets in scope", "scope"))), " ")
+	var out []Candidate
+	seen := map[string]bool{}
+	for _, m := range systemRE.FindAllString(text, -1) {
+		name := strings.TrimSpace(m)
+		if name == "" || len(name) > 60 {
+			continue
+		}
+		low := strings.ToLower(name)
+		if low == "a node" || low == "the api" || strings.HasPrefix(low, "an ") {
+			continue
+		}
+		key := low
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		out = append(out, Candidate{Identifier: name, Type: "SYSTEM", Section: "in-scope section"})
+		if len(out) >= 15 {
+			break
+		}
+	}
+	return out
 }
 
 // looksLikeFileHost rejects "Reactor.sol" and similar source-file names that
@@ -257,6 +295,12 @@ func sections(policy string, words ...string) string {
 
 func extractCandidates(policy string) []Candidate {
 	text := sections(policy, "in scope", "assets in scope", "scope", "target")
+	emailDomains := map[string]bool{}
+	for _, e := range emailRE.FindAllString(policy, -1) {
+		if i := strings.LastIndex(e, "@"); i >= 0 {
+			emailDomains[strings.ToLower(e[i+1:])] = true
+		}
+	}
 	var out []Candidate
 	seen := map[string]bool{}
 	add := func(c Candidate) {
@@ -292,7 +336,8 @@ func extractCandidates(policy string) []Candidate {
 
 	for _, raw := range domainRE.FindAllString(text, -1) {
 		host := strings.ToLower(strings.TrimSuffix(raw, "."))
-		if noiseHosts[host] || host == "github.com" || looksLikeFileHost(host) || len(host) < 5 {
+		if noiseHosts[host] || host == "github.com" || looksLikeFileHost(host) || len(host) < 5 ||
+			strings.HasPrefix(host, "docs.") || emailDomains[host] {
 			continue
 		}
 		add(Candidate{Identifier: host, Host: host, Type: "HOST", Section: "in-scope section"})
@@ -317,9 +362,9 @@ func extractContractAssets(policy string) []Asset {
 
 var (
 	maxRewardRE = regexp.MustCompile(`(?i)(?:maximum bounty|max(?:imum)? payout|maximum reward|up to)\s*[:\-]?\s*\$?\s*([\d,.]+)\s*([kKmM]?)`)
-	sevRewardRE = regexp.MustCompile(`(?im)(critical|high|medium|low)[^$]{0,80}?\$\s*([\d,.]+)\s*([kKmM]?)`)
-	// "Critical (<1M USDC)" and "up to $300k" style pages.
-	sevCapRE = regexp.MustCompile(`(?im)(critical|high|medium|low)\s*(?:[^$\n]{0,30}?)?[<(]?\s*(?:up to\s*)?\$?\s*([\d,.]+)\s*([kKmM]?)\s*(?:USDC|USD|\$)`)
+	sevRewardRE = regexp.MustCompile(`(?im)(critical|high|medium|low|others|informational)[^$]{0,80}?\$\s*([\d,.]+)\s*([kKmM]?)`)
+	// "Critical (<1M USDC)", "up to $300k", "200,000 USDT" style pages.
+	sevCapRE = regexp.MustCompile(`(?im)(critical|high|medium|low|others|informational)\s*(?:[^$\n]{0,30}?)?[<(]?\s*(?:up to\s*)?\$?\s*([\d,.]+)\s*([kKmM]?)\s*(?:USDC|USDT|USD|\$)`)
 )
 
 func extractRewards(policy string) (int, []BountyRow) {

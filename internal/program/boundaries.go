@@ -27,19 +27,30 @@ type Boundaries struct {
 	EligibilityText    string   `json:"eligibility_text,omitempty"`
 	DisclosureText     string   `json:"disclosure_text,omitempty"`
 	SubmissionText     string   `json:"submission_text,omitempty"`
+	SubmissionContact  []string `json:"submission_contact,omitempty"`
 	ScopeIsStructured  bool     `json:"scope_is_structured,omitempty"`
 	Notes              []string `json:"notes,omitempty"`
 }
 
 var (
 	headerRE       = regexp.MustCompile(`(?i)\bX-[A-Za-z0-9][A-Za-z0-9-]{2,}\b`)
-	noMainnetRE    = regexp.MustCompile(`(?i)(no (?:unauthorized )?testing on (?:mainnet|production)|do not test.{0,60}mainnet|testing on mainnet (?:code|deployments)|no testing against live|must not test.{0,40}mainnet|use (?:local forks?|testnet))`)
+	noMainnetRE    = regexp.MustCompile(`(?i)(do\s+not\s+test|not\s+test|no\s+testing|testing\s+(?:on|against)|must\s+not\s+test)[^\n]{0,100}\b(mainnet|production|live\s+(?:system|service|deployment))`)
 	mainnetAllowRE = regexp.MustCompile(`(?i)(mainnet.*(?:is|are) in scope|testing on mainnet (?:is )?allowed|in scope.*mainnet assets)`)
 	pocRE          = regexp.MustCompile(`(?i)(poc|proof of concept)[^\n]{0,40}(required|must|always)|required[^\n]{0,40}(poc|proof of concept)`)
 	kycRE          = regexp.MustCompile(`(?i)\bkyc\b|know your customer|identity verification|proof of identity`)
 	depositRE      = regexp.MustCompile(`(?i)deposit (?:is )?required`)
-	disclosureRE   = regexp.MustCompile(`(?i)(do not .{0,40}disclos|no public disclosure|disclosure policy|responsible publication|confidentiality)`)
+	hintRE         = regexp.MustCompile(`(?s)\{%[^%]*%\}`)
+	emailRE        = regexp.MustCompile(`[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}`)
 )
+
+// plain strips markdown/hint markup so keyword matching is not defeated by
+// "Do **not** test" or GitBook "{% hint %}" blocks. Verbatim sections keep
+// the original markup.
+func plain(s string) string {
+	s = hintRE.ReplaceAllString(s, " ")
+	s = strings.NewReplacer("**", "", "__", "", "`", "", "\\", "").Replace(s)
+	return s
+}
 
 // ExtractBoundaries reads the policy text. It never upgrades a missing rule to
 // "allowed": absence of a phrase means "unknown", not permission.
@@ -50,12 +61,42 @@ func ExtractBoundaries(policy, confidence string) Boundaries {
 		return b
 	}
 
+	text := plain(policy)
 	b.InScopeText = trimExcerpt(sections(policy, "in scope", "assets in scope", "scope"))
 	b.OutOfScopeText = trimExcerpt(sectionByTitle(policy, "out of scope", "not in scope", "exclusions"))
 	b.ProhibitedText = trimExcerpt(sectionByTitle(policy, "prohibited", "not eligible", "what we're not looking for", "ineligibility"))
 	b.EligibilityText = trimExcerpt(sectionByTitle(policy, "eligibility", "who can participate", "requirements"))
 	b.DisclosureText = trimExcerpt(sectionByTitle(policy, "disclosure", "responsible publication", "confidentiality"))
-	b.SubmissionText = trimExcerpt(sectionByTitle(policy, "submission", "how to report", "submit a bug", "report triage"))
+	b.SubmissionText = trimExcerpt(sectionByTitle(policy, "submission", "how to report", "submit a bug", "report triage", "submitting an eligible report"))
+
+	// Many policies put contact and confidentiality rules inside bullets
+	// instead of a heading. Fall back to keyword lines rather than report
+	// "not published" when the text is clearly there.
+	if b.SubmissionText == "" {
+		b.SubmissionText = trimExcerpt(linesMatching(policy, "security@", "submit your report", "send your report", "report directly"))
+	}
+	if b.DisclosureText == "" {
+		b.DisclosureText = trimExcerpt(linesMatching(policy, "confidential", "do not disclose", "no public disclosure", "public acknowledgment"))
+	}
+	if b.EligibilityText == "" {
+		b.EligibilityText = trimExcerpt(linesMatching(policy, "first report", "not already known", "reproducible", "conflict of interest", "kyc"))
+	}
+	for _, e := range emailRE.FindAllString(policy, -1) {
+		e = strings.ToLower(e)
+		if strings.HasPrefix(e, "noreply") || strings.HasPrefix(e, "no-reply") {
+			continue
+		}
+		found := false
+		for _, x := range b.SubmissionContact {
+			if x == e {
+				found = true
+			}
+		}
+		if !found {
+			b.SubmissionContact = append(b.SubmissionContact, e)
+		}
+	}
+	sort.Strings(b.SubmissionContact)
 
 	for _, h := range headerRE.FindAllString(policy, -1) {
 		name := strings.ToUpper(h)
@@ -74,17 +115,17 @@ func ExtractBoundaries(policy, confidence string) Boundaries {
 	}
 	sort.Strings(b.RequiredHeaders)
 
-	b.PoCRequired = pocRE.MatchString(policy)
-	b.KYCRequired = kycRE.MatchString(policy)
-	b.DepositRequired = depositRE.MatchString(policy)
+	b.PoCRequired = pocRE.MatchString(text)
+	b.KYCRequired = kycRE.MatchString(text)
+	b.DepositRequired = depositRE.MatchString(text)
 
 	switch {
-	case noMainnetRE.MatchString(policy):
+	case noMainnetRE.MatchString(text):
 		b.MainnetTesting = "forbidden"
-		if regexp.MustCompile(`(?i)testnet|local fork|foundry|simulated environment`).MatchString(policy) {
+		if regexp.MustCompile(`(?i)testnet|local fork|foundry|simulated environment`).MatchString(text) {
 			b.TestingEnvironment = "testnet-or-local-fork"
 		}
-	case mainnetAllowRE.MatchString(policy):
+	case mainnetAllowRE.MatchString(text):
 		b.MainnetTesting = "explicitly-allowed"
 		b.TestingEnvironment = "mainnet"
 	}
@@ -104,6 +145,9 @@ func ExtractBoundaries(policy, confidence string) Boundaries {
 	if len(b.RequiredHeaders) > 0 {
 		b.Notes = append(b.Notes, "research headers required: "+strings.Join(b.RequiredHeaders, ", "))
 	}
+	if len(b.SubmissionContact) > 0 {
+		b.Notes = append(b.Notes, "submit directly to "+strings.Join(b.SubmissionContact, ", ")+" — check the policy for third-party-platform restrictions")
+	}
 	if strings.EqualFold(confidence, "heuristic") {
 		b.Notes = append(b.Notes, "these rules were extracted from page text — re-read policy.md before testing")
 	}
@@ -118,6 +162,22 @@ func yesNotStated(v bool) string {
 		return "yes — stated in policy"
 	}
 	return "not stated in policy"
+}
+
+// linesMatching returns lines containing any of the given needles, with a
+// small amount of surrounding context for list items.
+func linesMatching(policy string, needles ...string) string {
+	var out []string
+	for _, line := range strings.Split(policy, "\n") {
+		low := strings.ToLower(plain(line))
+		for _, n := range needles {
+			if strings.Contains(low, strings.ToLower(n)) {
+				out = append(out, strings.TrimSpace(line))
+				break
+			}
+		}
+	}
+	return strings.Join(out, "\n")
 }
 
 // sectionByTitle returns the first section whose heading contains one of the
@@ -172,6 +232,9 @@ func (b Boundaries) Markdown() string {
 	fmt.Fprintf(&out, "| Deposit | %s |\n", yesNotStated(b.DepositRequired))
 	if len(b.RequiredHeaders) > 0 {
 		fmt.Fprintf(&out, "| Required headers | `%s` |\n", strings.Join(b.RequiredHeaders, "`, `"))
+	}
+	if len(b.SubmissionContact) > 0 {
+		fmt.Fprintf(&out, "| Report to | `%s` |\n", strings.Join(b.SubmissionContact, "`, `"))
 	}
 	out.WriteString("\n")
 

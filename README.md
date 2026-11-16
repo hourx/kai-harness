@@ -250,6 +250,7 @@ Pipeline memakai folder `targets-<name>/`; pack ini memakai `recon/`
 | `crt.sh(status 502)` | CT publik sedang gangguan. Cert Spotter jalan paralel; cakupan mungkin kurang lengkap. |
 | verdict `review` | Sumber bukan H1 terstruktur. Verifikasi scope di `policy.md` sebelum `--trust-scope`. |
 | `no host-level scope` | Program web3 / non-HTTP. Pakai `analyze`, bukan `recon`. |
+| GitBook di domain sendiri (`docs.*`) | Tetap dibaca lewat varian `.md` di sebelah halaman. |
 | `mainnet testing is forbidden` | Jangan kirim request ke produksi. Pakai testnet/local fork. |
 | `session none` | Area login belum dipetakan. Impor HAR dulu kalau program mengizinkan. |
 | `rules-diff` baseline | Baru intake pertama; belum ada pembanding. |
