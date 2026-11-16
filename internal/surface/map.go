@@ -285,6 +285,11 @@ func IsIDParam(name string) bool {
 // ObjectRef finds a path segment that is a numeric id, a UUID or a long hex id.
 func ObjectRef(path string) (Ref, bool) {
 	segs := segments(path)
+	// "/412" alone is a number, not an object reference: there is no
+	// resource to swap IDs on. Require a named segment as context.
+	if len(segs) == 1 {
+		return Ref{}, false
+	}
 	for _, s := range segs {
 		low := strings.ToLower(s)
 		switch {

@@ -11,6 +11,23 @@ import (
 	"github.com/hourx/bountykit/internal/netx"
 )
 
+func TestLooksLikeEndpoint(t *testing.T) {
+	cases := map[string]bool{
+		"/api/v1/users": true,
+		"/api/users/42": true,
+		"/412":          false,
+		"/12345":        false,
+		"/ab":           false,
+		"//api":         false,
+		"/app.js":       true, // PathOf filters static extensions later
+	}
+	for path, want := range cases {
+		if got := looksLikeEndpoint(path); got != want {
+			t.Errorf("looksLikeEndpoint(%q) = %v, want %v", path, got, want)
+		}
+	}
+}
+
 func TestPathOf(t *testing.T) {
 	cases := []struct {
 		raw        string

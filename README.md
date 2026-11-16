@@ -197,7 +197,7 @@ mandiri lain.
 4. Aset berskope path tidak pernah dilebarkan jadi aturan host.
 5. Aturan yang tidak dipublikasikan = `unknown`, bukan izin.
 6. Sumber heuristic selalu verdict `review`, tidak pernah `go`.
-7. Session tidak pernah masuk ZIP kecuali `--include-session` (dan tool memperingatkan).
+7. Session tidak pernah masuk ZIP kecuali `--include-session` (dan tool memperingatkan). Cookie/header session hanya dikirim ke host in-scope, bukan ke crt.sh/CDN.
 8. `intake` hanya baca halaman publik. Tidak login, tidak menyentuh aset target.
 9. `data/`, `dist/`, `*.zip` tidak pernah masuk git.
 

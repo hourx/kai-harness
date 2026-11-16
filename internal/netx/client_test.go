@@ -40,6 +40,25 @@ func TestSessionAttached(t *testing.T) {
 	}
 }
 
+func TestSessionHostAllowList(t *testing.T) {
+	var got string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		got = r.Header.Get("Cookie")
+	}))
+	defer srv.Close()
+
+	c := New("bountykit-test", 50, nil)
+	defer c.Close()
+	c.SetSession(Session{Cookies: "sid=secret", Hosts: []string{"example.com"}})
+
+	if _, err := c.Get(context.Background(), srv.URL, 1024); err != nil {
+		t.Fatal(err)
+	}
+	if got != "" {
+		t.Errorf("cookie leaked to a host outside the allow-list: %q", got)
+	}
+}
+
 func TestSessionNotSetByDefault(t *testing.T) {
 	var gotCookie string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

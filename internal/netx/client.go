@@ -33,6 +33,10 @@ type Response struct {
 type Session struct {
 	Cookies string
 	Headers map[string]string
+	// Hosts limits where the credentials may be sent. Subdomains of each
+	// entry are allowed. An empty list means "all hosts" (used by callers
+	// that already enforce scope themselves).
+	Hosts []string
 }
 
 // Client wraps http.Client with a scope-aware redirect policy and rate limit.
@@ -86,7 +90,7 @@ func (c *Client) Get(ctx context.Context, raw string, max int64) (*Response, err
 	}
 	req.Header.Set("User-Agent", c.UA)
 	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/json;q=0.9,*/*;q=0.8")
-	if c.sess != nil {
+	if c.sess != nil && sessionAllowed(c.sess.Hosts, u.Hostname()) {
 		if c.sess.Cookies != "" && req.Header.Get("Cookie") == "" {
 			req.Header.Set("Cookie", c.sess.Cookies)
 		}
@@ -162,6 +166,24 @@ func (c *Client) PostJSON(ctx context.Context, raw string, payload any, max int6
 		b = b[:max]
 	}
 	return resp.StatusCode, b, nil
+}
+
+// sessionAllowed implements the host allow-list for credentials.
+func sessionAllowed(hosts []string, host string) bool {
+	if len(hosts) == 0 {
+		return true
+	}
+	host = strings.ToLower(strings.TrimSuffix(host, "."))
+	for _, h := range hosts {
+		h = strings.ToLower(strings.TrimSuffix(strings.TrimSpace(h), "."))
+		if h == "" {
+			continue
+		}
+		if host == h || strings.HasSuffix(host, "."+h) {
+			return true
+		}
+	}
+	return false
 }
 
 // Close releases idle connections and stops the limiter goroutine.

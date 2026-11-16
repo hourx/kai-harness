@@ -57,6 +57,7 @@ type Summary struct {
 	NewHosts     int
 	NewEndpoints int
 	ChangedJS    int
+	Baseline     bool
 	Elapsed      time.Duration
 }
 
@@ -118,10 +119,16 @@ func Run(ctx context.Context, p *workspace.Program, opts Options) (Summary, erro
 	client := netx.New(opts.UserAgent, opts.RPS, allow)
 	defer client.Close()
 	if opts.Session != "" || len(opts.SessionHeaders) > 0 {
-		client.SetSession(netx.Session{Cookies: opts.Session, Headers: opts.SessionHeaders})
+		allowed := append([]string{}, opts.SeedHosts...)
+		allowed = append(allowed, opts.Domains...)
+		client.SetSession(netx.Session{Cookies: opts.Session, Headers: opts.SessionHeaders, Hosts: allowed})
 	}
 
-	if !step("discover", fmt.Sprintf("subdomain enumeration for %s", strings.Join(opts.Domains, ", "))) {
+	discoverDetail := fmt.Sprintf("subdomain enumeration for %s", strings.Join(opts.Domains, ", "))
+	if len(opts.Domains) == 0 {
+		discoverDetail = fmt.Sprintf("probe %d in-scope seed host(s) directly — no wildcard to enumerate", len(opts.SeedHosts))
+	}
+	if !step("discover", discoverDetail) {
 		return sum, fmt.Errorf("aborted")
 	}
 
@@ -272,13 +279,10 @@ func Run(ctx context.Context, p *workspace.Program, opts Options) (Summary, erro
 	sort.Strings(urls)
 	sum.URLs = len(urls)
 
-	// 6. Bundles.
+	// 6. Bundles. Only URLs that already passed the scope gate (step 5)
+	// are fetched. Sending session cookies to a CDN found in a <script>
+	// tag would be a credential leak; the gate is the floor for every fetch.
 	jsSet := map[string]struct{}{}
-	for _, pr := range probes {
-		for _, j := range pr.JS {
-			jsSet[j] = struct{}{}
-		}
-	}
 	for _, u := range urls {
 		if strings.HasSuffix(strings.ToLower(strings.TrimSuffix(u, "/")), ".js") {
 			jsSet[u] = struct{}{}
@@ -371,6 +375,7 @@ func Run(ctx context.Context, p *workspace.Program, opts Options) (Summary, erro
 	sum.NewHosts = len(d.NewHosts)
 	sum.NewEndpoints = len(d.NewEndpoints)
 	sum.ChangedJS = len(d.ChangedJS)
+	sum.Baseline = d.Baseline
 	sum.Elapsed = time.Since(start)
 	return sum, nil
 }

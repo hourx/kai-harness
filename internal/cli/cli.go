@@ -441,7 +441,11 @@ func cmdRecon(args []string) int {
 	fmt.Printf("done in %s\n", sum.Elapsed.Round(time.Second))
 	fmt.Printf("  discovered %d  in-scope %d  resolved %d  live %d\n", sum.Discovered, sum.Gated, sum.Resolved, sum.Live)
 	fmt.Printf("  urls %d  bundles %d  endpoints %d\n", sum.URLs, sum.Bundles, sum.Endpoints)
-	fmt.Printf("  diff: +%d hosts  +%d endpoints  %d js changed\n", sum.NewHosts, sum.NewEndpoints, sum.ChangedJS)
+	if sum.Baseline {
+		fmt.Printf("  diff: baseline snapshot (no previous run to compare)\n")
+	} else {
+		fmt.Printf("  diff: +%d hosts  +%d endpoints  %d js changed\n", sum.NewHosts, sum.NewEndpoints, sum.ChangedJS)
+	}
 
 	if plan, err := buildSurface(p); err != nil {
 		fmt.Fprintf(os.Stderr, "bountykit: map/next failed (%v)\n", err)

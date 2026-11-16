@@ -53,6 +53,30 @@ func PathOf(rawurl string) (string, []string) {
 	return path, Uniq(params)
 }
 
+// looksLikeEndpoint rejects strings that JS regexes commonly mistake for
+// API paths: "/412", "/12345", "/ab", template junk and double slashes.
+func looksLikeEndpoint(path string) bool {
+	if path == "" || !strings.HasPrefix(path, "/") || strings.Contains(path, "//") {
+		return false
+	}
+	letters := 0
+	for _, r := range path {
+		if r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' {
+			letters++
+		}
+	}
+	if letters < 3 {
+		return false
+	}
+	segs := strings.Split(strings.Trim(path, "/"), "/")
+	for _, s := range segs {
+		if s == "" || strings.Trim(s, "{}:$") == "" {
+			return false
+		}
+	}
+	return true
+}
+
 func isStatic(path string) bool {
 	low := strings.ToLower(path)
 	for ext := range staticExt {
@@ -145,7 +169,7 @@ func ExtractPaths(urls []string, bundles []Bundle) map[string][]string {
 	found := map[string][]string{}
 	absorb := func(raw string) {
 		path, params := PathOf(raw)
-		if path == "" {
+		if path == "" || !looksLikeEndpoint(path) {
 			return
 		}
 		found[path] = Uniq(found[path], params)

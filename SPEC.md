@@ -347,6 +347,7 @@ bountykit report <program>
 4. Tidak ada credential, cookie, atau token di dalam ZIP kecuali lewat `--include-session`; tool mencetak peringatan saat itu terjadi.
 5. ZIP tidak pernah masuk git. `data/` dan `dist/` gitignored.
 6. `session.json` mode 0600, dan `session show` selalu menutupi nilai rahasia.
+7. Cookie/header session hanya dikirim ke host yang lolos gate — bukan ke layanan CT, CDN, atau host referensi.
 7. `intake` hanya membaca API publik platform: tidak login, tidak menyentuh aset target.
 8. Aset berskope path tidak pernah dilebarkan jadi aturan host.
 9. Host dari teks halaman tetap jadi kandidat sampai operator memverifikasi dan memakai `--trust-scope`.
