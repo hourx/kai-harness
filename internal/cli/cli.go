@@ -409,6 +409,7 @@ func cmdRecon(args []string) int {
 		Adapters:   adapters,
 		Log:        os.Stdout,
 	}
+	sessUsed, sessCookies, sessHeaders := false, 0, 0
 	if !*noSession {
 		sess, err := session.Load(p.Dir)
 		switch {
@@ -416,7 +417,8 @@ func cmdRecon(args []string) int {
 			cookies := session.CookieHeader(sess.Cookies)
 			opts.Session = cookies
 			opts.SessionHeaders = sess.Headers
-			fmt.Printf("session  stored (%d cookies, %d headers)\n", len(sess.Cookies), len(sess.Headers))
+			sessUsed, sessCookies, sessHeaders = true, len(sess.Cookies), len(sess.Headers)
+			fmt.Printf("session  stored (%d cookies, %d headers)\n", sessCookies, sessHeaders)
 		case errors.Is(err, session.ErrNone):
 			fmt.Println("session  none — unauthenticated surface only")
 		default:
@@ -432,6 +434,14 @@ func cmdRecon(args []string) int {
 			opts.Confirm = promptConfirm
 		}
 	}
+
+	// Record how recon was performed. Counts only — never cookie values.
+	// The pack uses this to warn the receiving agent that the mapped surface
+	// is authenticated even though the session itself is not shipped.
+	_ = writeJSON(filepath.Join(p.Dir, "session-used.json"), map[string]any{
+		"used": sessUsed, "cookies": sessCookies, "headers": sessHeaders,
+		"at": time.Now().UTC().Format(time.RFC3339),
+	})
 
 	sum, err := recon.Run(context.Background(), p, opts)
 	if err != nil {

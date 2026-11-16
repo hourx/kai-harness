@@ -284,6 +284,10 @@ func brief(p *workspace.Program, now time.Time, opts Options) string {
 	switch {
 	case opts.IncludeSession:
 		b.WriteString("| Session | **included** in `bountykit/session.json` — delete after use |\n\n")
+	case reconUsedSession(p):
+		su := sessionUse(p)
+		fmt.Fprintf(&b, "| Session | recon used authenticated context (%d cookies, %d headers) at %s — **not included**; agent must supply its own session |\n\n",
+			su.Cookies, su.Headers, su.At)
 	case sessionExists(p):
 		b.WriteString("| Session | stored on the operator machine, not included |\n\n")
 	default:
@@ -458,6 +462,24 @@ func brief(p *workspace.Program, now time.Time, opts Options) string {
 	b.WriteString("\n")
 	return b.String()
 }
+
+type sessionUseInfo struct {
+	Used    bool   `json:"used"`
+	Cookies int    `json:"cookies"`
+	Headers int    `json:"headers"`
+	At      string `json:"at"`
+}
+
+func sessionUse(p *workspace.Program) sessionUseInfo {
+	var s sessionUseInfo
+	b, err := os.ReadFile(filepath.Join(p.Dir, "session-used.json"))
+	if err == nil {
+		_ = json.Unmarshal(b, &s)
+	}
+	return s
+}
+
+func reconUsedSession(p *workspace.Program) bool { return sessionUse(p).Used }
 
 func sessionExists(p *workspace.Program) bool {
 	_, err := os.Stat(filepath.Join(p.Dir, "session.json"))
