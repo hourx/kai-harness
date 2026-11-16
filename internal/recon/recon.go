@@ -279,10 +279,16 @@ func Run(ctx context.Context, p *workspace.Program, opts Options) (Summary, erro
 	sort.Strings(urls)
 	sum.URLs = len(urls)
 
-	// 6. Bundles. Only URLs that already passed the scope gate (step 5)
-	// are fetched. Sending session cookies to a CDN found in a <script>
-	// tag would be a credential leak; the gate is the floor for every fetch.
+	// JS is often served from a CDN outside the host gate. Fetching it is
+	// still useful for endpoint discovery, and safe: the session is host-
+	// scoped, so these requests never carry target credentials. They are NOT
+	// written to urls.txt (that file stays strictly in-scope).
 	jsSet := map[string]struct{}{}
+	for _, pr := range probes {
+		for _, j := range pr.JS {
+			jsSet[j] = struct{}{}
+		}
+	}
 	for _, u := range urls {
 		if isJSURL(u) {
 			jsSet[u] = struct{}{}
@@ -295,7 +301,7 @@ func Run(ctx context.Context, p *workspace.Program, opts Options) (Summary, erro
 	sort.Strings(jsList)
 	bundles := FetchBundles(ctx, client, jsList, opts.MaxBundles)
 	sum.Bundles = len(bundles)
-	logf("urls    %d, bundles %d", sum.URLs, sum.Bundles)
+	logf("urls    %d in-scope, bundles %d (public JS, no session on external hosts)", sum.URLs, sum.Bundles)
 
 	// 7. Endpoints.
 	paths := ExtractPaths(urls, bundles)
