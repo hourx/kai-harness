@@ -1,24 +1,260 @@
 # bountykit
 
-Deterministic context packs for bug bounty work.
+Pembantu Phase 0–3 bug bounty: membaca aturan program, memetakan permukaan,
+lalu menghasilkan satu ZIP yang langsung bisa dipakai Kairos (`bugbounty-pipeline`).
 
-bountykit does the mechanical phases — program intake (Phase 0), recon, surface
-mapping, test queue — and emits a ZIP that drops straight into a Kairos
-workspace. The agent then hunts with real context instead of re-discovering the
-surface from zero.
+Bukan tool recon baru. Nilainya ada di **state lintas-run** (`first_seen` /
+`last_seen` + diff), **batasan yang terdokumentasi**, dan **brief kecil** yang
+dibaca agent sebelum mulai hunting.
 
-Design rationale: [`SPEC.md`](SPEC.md).
+Desain: [`SPEC.md`](SPEC.md).
 
-## Why
+---
 
-Automation alone produces duplicates, because it only ever finds the shallowest
-layer, and every other hunter's automation scans that layer first. bountykit
-adds the two things automation normally lacks:
+## Mulai dari sini (urutan lengkap)
 
-- **State across runs** — `first_seen` / `last_seen` per asset, so the pack can
-  say what is *new*. New surface is the only reliable anti-duplicate lever.
-- **A distilled handoff** — one page (`BRIEF.md`), not a 100k-line skill dump.
-  The agent reads the brief, not the universe.
+Contoh memakai program HackerOne. Ganti `temu` dengan programmu.
+
+### 0. Cek dulu layak tidaknya (tanpa bikin apa-apa)
+
+```bash
+bountykit intake 'https://hackerone.com/temu?type=team' --dry-run
+```
+
+Keluar scorecard: reward, jumlah report 90 hari, efficiency, dan scope yang
+publish. Verdict `go` / `careful` / `skip` / `vdp-only` / `review`.
+
+### 1. Buat workspace
+
+```bash
+bountykit intake 'https://hackerone.com/temu?type=team'
+```
+
+Terbuat `data/temu/` berisi `scope.txt`, `out-of-scope.txt`, `policy.md`,
+`boundaries.md`, `program.md`, `intake.json`.
+
+### 2. Baca batasan sebelum apa pun
+
+```bash
+bountykit boundaries temu
+```
+
+Ini **kontrak program**: aturan mainnet/testnet, PoC, KYC, header wajib, dan
+kutipan verbatim bagian in-scope / out-of-scope / prohibited / disclosure.
+Yang tidak dipublikasikan ditulis `unknown` / "not stated" — bukan izin.
+
+### 3. Periksa scope, lalu gate tiap host
+
+```bash
+cat data/temu/scope.txt data/temu/out-of-scope.txt
+bountykit scope temu www.temu.com     # exit 0=IN, 1=OUT, 2=error
+bountykit scope temu evil.temu.com.evil.test
+```
+
+`out-of-scope.txt` selalu menang. Empty `scope.txt` membuat recon menolak jalan.
+
+### 4. (Opsional) Impor session kalau mau petakan area login
+
+```bash
+bountykit session temu set --har ~/Downloads/burp.har
+bountykit session temu show                      # nilai disembunyikan
+bountykit recon temu                             # otomatis pakai session
+bountykit session temu clear
+```
+
+Tanpa session, yang dipetakan hanya permukaan unauth. `--no-session` untuk
+memaksa recon tanpa session.
+
+### 5A. Jalur web — recon
+
+```bash
+bountykit recon temu                 # crt.sh + Cert Spotter (+adapter kalau ada)
+bountykit recon temu --step          # mode belajar: berhenti tiap fase
+bountykit diff temu                  # apa yang baru sejak run terakhir
+```
+
+Host eksak dari `scope.txt` diprobes langsung. Wildcard baru di-enumerasi
+subdomainnya. Semua host lolos gate dulu sebelum ada request keluar.
+
+### 5B. Jalur non-web — repo & kontrak
+
+Untuk program seperti Uniswap (Cantina), Beanstalk (Immunefi), Hyperliquid,
+Ethereum, atau Muse:
+
+```bash
+bountykit analyze uniswap             # tanpa clone: lihat daftar aset dulu
+bountykit analyze uniswap --clone     # clone repo in-scope ke data/<program>/repos/
+bountykit analyze uniswap --refresh   # git pull repo yang sudah ada
+```
+
+`analyze` membaca workflow CI (mis. `pull_request_target`, `${{ github.event.* }}`,
+`write-all`), install-time scripts, manifest, entry point kontrak, dan alamat
+kontrak beserta explorer-nya. Hasilnya `nonweb.md` / `nonweb.json`.
+
+### 6. Bangun peta dan antrian tes
+
+```bash
+bountykit map temu                   # modul, object ref, parameter, aset non-web
+bountykit next temu                  # antrian terurut + alasan + probe pertama
+```
+
+`recon` dan `analyze` otomatis menyegarkan keduanya. `next` memasukkan aset
+non-web, dan probe-nya mewarisi batasan — program yang melarang mainnet akan
+bilang "use testnet or a local fork only" di probe pertamanya.
+
+### 7. Cek perubahan aturan
+
+```bash
+bountykit rules-diff temu
+```
+
+Tiap intake di-snapshot ke `intakes/<ts>/`. Kalau program mencabut host dari
+scope, mengubah reward, atau mengedit policy, ini muncul di sini dan di
+`BRIEF.md`.
+
+### 8. Pack untuk Kairos
+
+```bash
+bountykit pack temu -o dist
+bountykit pack temu -o dist --include-session   # HANYA kalau agent perlu auth
+```
+
+Lalu di mesin Kairos:
+
+```bash
+unzip dist/temu_*.zip -d workspace/
+```
+
+ZIP berisi `BRIEF.md` yang dibuka dengan Phase 0 → Boundaries → perubahan
+aturan → scope → Start here (ranked) → diff permukaan.
+
+---
+
+## Contoh singkat: sumber non-HackerOne
+
+```bash
+# 1. baca (verdict selalu "review" untuk sumber teks)
+bountykit intake cantina.xyz/bounties/f9df94db-c7b1-434b-bb06-d1360abdd1be --dry-run
+
+# 2. buat workspace
+bountykit intake cantina.xyz/bounties/f9df94db-c7b1-434b-bb06-d1360abdd1be \
+  --name uniswap
+
+# 3. baca batasan
+bountykit boundaries uniswap
+
+# 4. host dari teks prose MASIH kandidat, belum aktif.
+#    Verifikasi di policy.md, lalu aktifkan kalau setuju:
+bountykit intake cantina.xyz/bounties/f9df94db-c7b1-434b-bb06-d1360abdd1be \
+  --name uniswap --force --trust-scope
+
+# 5. lanjut seperti biasa
+bountykit analyze uniswap --clone
+bountykit next uniswap
+bountykit pack uniswap -o dist
+```
+
+Sumber yang didukung: HackerOne (GraphQL terstruktur), Cantina, Immunefi,
+GitBook (varian `.md`), `bugbounty.meta.com`, `ethereum.org`, dan halaman
+mandiri lain.
+
+---
+
+## Daftar perintah
+
+| Perintah | Fungsi |
+|---|---|
+| `init <program> [--platform P] [--url U] [--domain d,d]` | workspace kosong manual |
+| `intake <url\|handle> [--name slug] [--dry-run] [--force] [--trust-scope]` | Phase 0 dari halaman program |
+| `boundaries <program>` | aturan, batasan, kutipan verbatim |
+| `rules-diff <program>` | perubahan aturan vs intake sebelumnya |
+| `scope <program> <host\|cidr>` | gate IN/OUT (exit 0/1/2) |
+| `session <program> [show\|set\|clear] [--har f] [--cookie s] [--header 'K: V']` | session untuk recon |
+| `recon <program> [--domain d] [--rps N] [--nuclei] [--step] [--no-session]` | discover → probe → harvest → diff |
+| `diff <program>` | permukaan baru sejak run terakhir |
+| `analyze <program> [--clone] [--refresh]` | repo & kontrak in-scope |
+| `map <program>` | peta endpoint + aset non-web |
+| `next <program>` | antrian tes terurut |
+| `pack <program> [-o dist] [--include-raw] [--include-session]` | ZIP handoff |
+| `status [<program>]` | ringkasan semua program |
+| `version` | versi + commit |
+
+---
+
+## Aturan keras
+
+1. `scope.txt` kosong → recon menolak. Tidak ada pengecualian.
+2. `out-of-scope.txt` selalu menang.
+3. Host dari teks prose tetap kandidat sampai diverifikasi + `--trust-scope`.
+4. Aset berskope path tidak pernah dilebarkan jadi aturan host.
+5. Aturan yang tidak dipublikasikan = `unknown`, bukan izin.
+6. Sumber heuristic selalu verdict `review`, tidak pernah `go`.
+7. Session tidak pernah masuk ZIP kecuali `--include-session` (dan tool memperingatkan).
+8. `intake` hanya baca halaman publik. Tidak login, tidak menyentuh aset target.
+9. `data/`, `dist/`, `*.zip` tidak pernah masuk git.
+
+Semantik gate identik dengan `Kairos/scripts/scope_check.py`:
+
+| Rule | Arti |
+|---|---|
+| `api.example.com` | exact host |
+| `*.example.com` | subdomain saja, apex tidak ikut |
+| `203.0.113.0/24` | CIDR |
+| out-of-scope | selalu menang |
+
+---
+
+## Artefak
+
+```
+data/<program>/
+  meta.json  program.md  scope.txt  out-of-scope.txt
+  boundaries.md            aturan + batasan + kutipan verbatim
+  policy.md                policy asli
+  intake.json              data Phase 0 + scorecard + boundaries
+  rules-diff.json/.md      perubahan aturan
+  intakes/<ts>/            snapshot intake
+  assets.json              host, endpoint, hash JS + first_seen/last_seen
+  diff.json/.md            delta permukaan
+  session.json             cookie (0600, tidak ikut pack by default)
+  nonweb.json/.md          hasil analyze
+  map.json/.md  next.json/.md
+  state/                   subs, live, urls, js, endpoints, ranked
+  snapshots/<ts>/          riwayat aset
+  repos/                   clone repo (hanya dengan --clone)
+  audit.log
+
+dist/<program>_<ts>.zip
+  <program>/
+    BRIEF.md  program.md  scope.txt  out-of-scope.txt
+    boundaries.md  policy.md  LEDGER.md
+    recon/                   sesuai konvensi Kairos
+    bountykit/
+      MANIFEST.json  intake.json  rules-diff.md
+      diff.md  map.json/.md  next.json/.md  nonweb.json/.md
+      session.json           hanya dengan --include-session
+```
+
+`BOUNTYKIT_HOME` mengganti root `./data`.
+
+Pipeline memakai folder `targets-<name>/`; pack ini memakai `recon/`
+(konvensi `docs/BUG-BOUNTY.md`). Pemetaan namanya ditulis di `BRIEF.md`.
+
+---
+
+## Masalah umum
+
+| Gejala | Arti / tindakan |
+|---|---|
+| `no domains` di recon | scope.txt tidak punya host atau wildcard. Isi manual atau ulangi `intake`. |
+| `crt.sh(status 502)` | CT publik sedang gangguan. Cert Spotter jalan paralel; cakupan mungkin kurang lengkap. |
+| verdict `review` | Sumber bukan H1 terstruktur. Verifikasi scope di `policy.md` sebelum `--trust-scope`. |
+| `no host-level scope` | Program web3 / non-HTTP. Pakai `analyze`, bukan `recon`. |
+| `mainnet testing is forbidden` | Jangan kirim request ke produksi. Pakai testnet/local fork. |
+| `session none` | Area login belum dipetakan. Impor HAR dulu kalau program mengizinkan. |
+| `rules-diff` baseline | Baru intake pertama; belum ada pembanding. |
+
+---
 
 ## Build
 
@@ -27,179 +263,11 @@ go build -o bin/bountykit ./cmd/bountykit
 go test ./...
 ```
 
-Go 1.21+. No cgo, no third-party modules.
+Go 1.21+. Tanpa cgo, tanpa dependency eksternal.
 
-## Use
-
-```bash
-# 1. Phase 0 — read the public program page (HackerOne today)
-bountykit intake 'https://hackerone.com/temu?type=team' --dry-run   # scorecard only
-bountykit intake temu                              # create workspace + scope + policy
-bountykit boundaries temu                          # aturan, batasan, out-of-scope (verbatim)
-bountykit rules-diff temu                          # aturan/scope berubah sejak intake terakhir?
-
-# 2. fill in / verify scope (intake writes what the platform publishes)
-$EDITOR data/temu/scope.txt data/temu/out-of-scope.txt
-
-# 3. gate every host before touching it
-bountykit scope temu www.temu.com   # exit 0 = IN, 1 = OUT, 2 = error
-
-# 4. discover the surface (exact hosts are probed directly, wildcards get CT/adapters)
-bountykit recon acme
-bountykit recon acme --step          # learn mode: pause before each phase
-
-# 5. map it and rank what to test
-bountykit map acme                   # modules, object refs, id params, GraphQL
-bountykit next acme                  # evidence-weighted test queue
-bountykit diff acme                  # what is new since the previous run
-
-# 6. authenticated surface (optional)
-bountykit session acme set --har ~/burp.har     # or --cookie 'sid=…'
-bountykit session acme show                     # values are masked
-bountykit recon acme                            # uses it automatically
-bountykit session acme clear
-
-# 7. build the handoff archive
-bountykit pack acme -o dist
-bountykit pack acme -o dist --include-session   # only if the agent needs auth
-
-# 8. on the Kairos box
-unzip dist/acme_*.zip -d workspace/
-```
-
-## Phase 0 intake
-
-`bountykit intake <url-or-handle>` reads **public program pages only** — it does
-not log in and does not touch target assets. Supported readers:
-
-| Source | How it is read | Confidence |
-| --- | --- | --- |
-| `hackerone.com/<handle>` | public GraphQL: scope, rewards, policy, report metrics, paginated | `structured` |
-| `*.gitbook.io/...` | the page's `.md` variant | `heuristic` |
-| `cantina.xyz/bounties/<uuid>` | server-rendered page text | `heuristic` |
-| `immunefi.com/bug-bounty/<slug>/information/` | page text (+ use `/scope/` for asset list) | `heuristic` |
-| `bugbounty.meta.com/payout-guidelines/<slug>` | page text (400-with-body tolerated) | `heuristic` |
-| `ethereum.org/bug-bounty/` and any other URL | page text | `heuristic` |
-
-Outputs: reward table, severity distribution where published, report/payout
-counters, testing constraints (no-mainnet, PoC, KYC, disclosure), a scorecard
-(money / crowding / speed / surface), `scope.txt`, `out-of-scope.txt`,
-`policy.md`, `program.md` and `intake.json`.
-
-Heuristic sources return verdict **`review`**, never `go`. Hosts mentioned near
-an in-scope heading are recorded as `candidate_assets` in `intake.json` but are
-**not** written into `scope.txt` by default — a regex cannot tell an in-scope
-host from an example. Verify them and rerun with `--trust-scope` if you want
-them promoted:
-
-```
-bountykit intake cantina.xyz/bounties/... --name uniswap --dry-run
-bountykit intake cantina.xyz/bounties/... --name uniswap --trust-scope
-```
-
-Scope is derived conservatively:
-
-| Platform scope | Result |
-| --- | --- |
-| `URL` / bare host | exact host rule |
-| `WILDCARD` | `*.domain` rule |
-| `CIDR` | CIDR rule |
-| URL with a path | **excluded** — a host-only gate would be broader than allowed |
-| app ID / contract / source / hardware | listed in the scorecard, never guessed as a host |
-
-Out-of-scope rules from the platform are written to `out-of-scope.txt`. Rules
-that cannot be expressed as hosts stay in `policy.md`.
-
-`boundaries.md` is the single authoritative "what may I touch" document:
-enforceable IN/OUT host rules, path-restricted and non-web assets, mainnet /
-test policy, PoC/KYC/deposit, required research headers, and **verbatim**
-in-scope, out-of-scope, prohibited, eligibility, submission and disclosure
-excerpts. `bountykit boundaries <program>` prints it; it is also in the ZIP and
-summarised at the top of `BRIEF.md`. Anything not published is rendered as
-"unknown / not stated", never as "allowed".
-
-Every intake is snapshotted under `intakes/<ts>/`. `bountykit rules-diff <program>`
-compares it with the previous one and flags new/removed scope rules, new or
-removed assets and candidates, reward changes, program state changes and edits
-to the policy text. A program that silently removes `api.example.com` from
-scope produces "Removed scope rules" — yesterday's test target is not
-automatically safe today. The diff is also summarised in `BRIEF.md`.
-
-`map` and `next` now consume Phase 0 non-web assets too: source repositories,
-contract addresses, API paths, app IDs and AI/model surfaces get their own
-hypotheses with class-specific probes. Verbatim boundaries are carried into
-those probes — a program that forbids mainnet testing says so in the first
-probe. Out-of-scope assets are never queued.
-
-## Scope semantics
-
-Identical to `Kairos/scripts/scope_check.py`:
-
-| Rule | Meaning |
-| --- | --- |
-| `api.example.com` | exact host |
-| `*.example.com` | subdomains only — never the apex |
-| `203.0.113.0/24` | CIDR containment |
-| `out-of-scope.txt` | always wins |
-| empty `scope.txt` | refuses to run (exit 2) |
-
-Every decision is appended to `data/<program>/audit.log`.
-
-## Layout
-
-```
-data/<program>/          state (gitignored)
-  meta.json
-  scope.txt  out-of-scope.txt  program.md  policy.md  boundaries.md
-  intake.json            structured Phase 0 data + scorecard + boundaries
-  audit.log
-  intakes/<ts>/          intake + boundaries + policy snapshots
-  rules-diff.json  rules-diff.md   rule changes vs previous intake
-  session.json           cookies + headers, mode 0600, never packed by default
-  assets.json            hosts, endpoints, JS hashes + first_seen/last_seen
-  diff.json  diff.md     delta vs previous snapshot
-  map.json  map.md       modules, object refs, id params
-  next.json  next.md     ranked test queue with reasons
-  state/                 current artifacts: subs, live, urls, js, endpoints, nuclei
-  snapshots/             per-run history for diff
-
-dist/<program>_<ts>.zip  handoff archive
-  <program>/
-    BRIEF.md             one page for the agent
-    program.md  scope.txt  out-of-scope.txt  LEDGER.md
-    recon/               what bugbounty-pipeline already reads
-    bountykit/
-      MANIFEST.json      files + sha256
-      intake.json        Phase 0 data + boundaries
-      rules-diff.md      rule changes
-      diff.md            what is new
-      map.md  map.json   surface map
-      next.md  next.json ranked queue
-      session.json       only with --include-session
-```
-
-`BOUNTYKIT_HOME` overrides the `./data` state root.
-
-## Status
-
-| Version | State |
-| --- | --- |
-| v0.1 | `init`, `scope`, `pack`, `status` — done |
-| v0.2 | `recon`, `diff`, snapshots — done |
-| v0.3 | `map`, `next`, session import — done |
-| v0.4 | `intake` (Phase 0), exact-host recon — done |
-| v0.5 | multi-source intake (H1, Cantina, Immunefi, GitBook, self-hosted) |
-| v0.6 | `boundaries` — structured limits + verbatim out-of-scope |
-| v0.7 | rule diff across intakes + non-web assets in `map`/`next` |
-| v0.8 | `report`, full adapters |
-
-## Rules
-
-1. Empty scope refuses to run. No exceptions.
-2. Out-of-scope always wins.
-3. No credentials, cookies or tokens in a pack unless `--include-session` is passed, and the tool says so loudly when it is.
-4. `data/` and `dist/` never enter git.
-5. `intake` reads public pages only. Never log in, never touch a target asset.
-6. Path-scoped platform assets are never widened into host rules.
-7. A host found in prose stays a candidate until the operator verifies it and passes `--trust-scope`.
-8. Missing rules are `unknown` / "not stated". Absence of a prohibition is never treated as permission.
+| Versi | Isi |
+|---|---|
+| v0.1–v0.3 | scope gate, pack, recon, diff, session, map, next |
+| v0.4–v0.6 | intake H1 + multi-sumber, boundaries verbatim |
+| v0.7–v0.8 | rule diff, aset non-web, analisis repo/kontrak |
+| v0.9 | `report`, adapter penuh |

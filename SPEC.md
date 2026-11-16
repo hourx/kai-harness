@@ -1,4 +1,4 @@
-# bountykit — SPEC v0.7
+# bountykit — SPEC v0.8
 
 Deterministic context-pack builder for bug bounty.
 Fase yang dikerjakan tool: **Program Selection (bantu) → Pre-Hunt (kumpulkan) → Recon → Mapping**.
@@ -49,7 +49,11 @@ Bukti dari dua repo yang ada:
 ### Dikerjakan v0.6
 - `boundaries` — dokumen tunggal berisi aturan, batasan, dan kutipan verbatim in/out-of-scope
 
-### Dikerjakan v0.7
+### Dikerjakan v0.8
+- `analyze` — repo in-scope (opsional di-clone) + kontrak; workflow CI, manifest, entry point
+- hasil analisis masuk `map`/`next` dengan probe yang mematuhi batasan
+
+### Dikerjakan v0.9
 - `report` — laporan markdown/HTML per program
 
 ### Bukan scope (selamanya)
@@ -201,12 +205,15 @@ data/<program>/
 ├── audit.log
 ├── intake.json       data Phase 0 + scorecard + boundaries (terstruktur)
 ├── boundaries.md     aturan + batasan + kutipan verbatim in/out-of-scope
+├── nonweb.json       hasil analyze (repo + kontrak)
+├── nonweb.md         ringkasan analisis non-web
 ├── rules-diff.json   delta aturan vs intake sebelumnya
 ├── rules-diff.md     delta yang dibaca agent
 ├── intakes/<ts>/     snapshot intake + boundaries + policy
 ├── policy.md         kebijakan program (class out-of-scope, header wajib)
 ├── session.json      cookie + header (0600, tidak ikut pack kecuali diminta)
 ├── assets.json       hosts, endpoints, JS hash (dengan first_seen/last_seen)
+├── repos/            clone repo (hanya lewat analyze --clone)
 ├── diff.json         delta vs snapshot sebelumnya
 ├── diff.md           delta dalam bentuk yang dibaca agent
 ├── map.json  map.md  modul, object reference, ID parameter, GraphQL
@@ -259,6 +266,7 @@ Batas bawah: item `surface-review` dengan skor < 30 dibuang. Kalau tidak ada yan
         ├── MANIFEST.json      ← daftar file + sha256
         ├── intake.json        ← Phase 0 (skor + alasan)
         ├── rules-diff.md      ← perubahan aturan
+        ├── nonweb.md  nonweb.json  ← analisis repo/kontrak
         ├── diff.md            ← apa yang baru
         ├── map.md  map.json   ← peta permukaan
         ├── next.md next.json  ← antrian tes terurut
@@ -311,6 +319,7 @@ v0.4:
 
 ```
 bountykit intake <hackerone-url|handle> [--name slug] [--dry-run] [--force]
+bountykit analyze <program> [--clone] [--refresh]        # repo + kontrak in-scope
 bountykit rules-diff <program>                   # delta aturan antar-intake
 bountykit boundaries <program>                   # aturan + batasan + verbatim
 bountykit intake <url> [--name slug] [--dry-run] [--force] [--trust-scope]
@@ -338,6 +347,7 @@ bountykit report <program>
 10. Aturan yang tidak dipublikasikan = `unknown` / "not stated", bukan izin. Kutipan out-of-scope wajib masuk `boundaries.md` apa adanya.
 11. Setiap intake di-snapshot. Perubahan scope atau policy wajib muncul di `rules-diff.md` dan `BRIEF.md`.
 12. Aset non-web yang out-of-scope tidak pernah masuk antrian `next`.
+13. `analyze --clone` hanya menyentuh repo yang tercantum di scope; clone disimpan di `data/` dan tidak pernah di-pack.
 
 ---
 
@@ -348,5 +358,5 @@ bountykit report <program>
 | v0.1 | `init`, `scope`, `pack`, `status` | ZIP bisa dibuat, gate identik dengan Kairos (diuji), agent bisa membaca BRIEF |
 | v0.2 | `recon`, `diff`, snapshot | Satu run menghasilkan `subs/live/urls/js/endpoints`; diff terisi — **selesai** |
 | v0.3 | `map`, `next`, session import | Antrian tes terurut + hipotesis per kelas vuln, permukaan auth ikut terpetakan — **selesai** |
-| v0.7 | rule diff + non-web surface | perubahan aturan terdeteksi; repo/kontrak/API masuk `map`/`next` — **selesai** |
-| v0.8 | `report`, adapter penuh | Laporan markdown/HTML per program |
+| v0.8 | `analyze` repo/kontrak | CI workflow + manifest masuk queue, probe patuh batasan — **selesai** |
+| v0.9 | `report`, adapter penuh | Laporan markdown/HTML per program |

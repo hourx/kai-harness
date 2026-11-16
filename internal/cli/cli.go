@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/hourx/bountykit/internal/netx"
+	"github.com/hourx/bountykit/internal/nonweb"
 	"github.com/hourx/bountykit/internal/pack"
 	"github.com/hourx/bountykit/internal/program"
 	"github.com/hourx/bountykit/internal/recon"
@@ -35,6 +36,7 @@ Commands:
   intake  <url|handle> [--name slug] [--dry-run] [--force] [--trust-scope]
                                                              Phase 0: read program
   boundaries <program>                                      print scope limits & rules
+  analyze   <program> [--clone] [--refresh]                 inspect in-scope repos/contracts
   rules-diff <program>                                      what changed since last intake
   scope   <program> <host|cidr>                              scope gate (IN/OUT)
   recon   <program> [--domain d] [--rps N] [--max-hosts N]
@@ -78,6 +80,8 @@ func Run(args []string) int {
 		return cmdScope(args[1:])
 	case "boundaries":
 		return cmdBoundaries(args[1:])
+	case "analyze":
+		return cmdAnalyze(args[1:])
 	case "rules-diff":
 		return cmdRulesDiff(args[1:])
 	case "recon":
@@ -263,6 +267,40 @@ func cmdBoundaries(args []string) int {
 		return fail(fmt.Errorf("no boundaries yet — run: bountykit intake <url> --name %s", p.Name))
 	}
 	fmt.Print(string(b))
+	return 0
+}
+
+func cmdAnalyze(args []string) int {
+	fs := flag.NewFlagSet("analyze", flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+	clone := fs.Bool("clone", false, "git clone in-scope repositories into data/<program>/repos/")
+	refresh := fs.Bool("refresh", false, "git pull already-cloned repositories")
+	pos, rest := split(args, nil)
+	if err := fs.Parse(rest); err != nil {
+		return 2
+	}
+	if len(pos) != 1 {
+		return fail(errors.New("usage: bountykit analyze <program> [--clone] [--refresh]"))
+	}
+	p, err := workspace.Open(pos[0])
+	if err != nil {
+		return fail(err)
+	}
+	rep, err := nonweb.Analyze(context.Background(), p, nonweb.Options{
+		Clone: *clone, Refresh: *refresh, Log: func(format string, args ...any) { fmt.Printf(format+"\n", args...) },
+	})
+	if err != nil {
+		return fail(err)
+	}
+	if err := nonweb.Save(p, rep); err != nil {
+		return fail(err)
+	}
+	fmt.Print(rep.Markdown())
+	if plan, err := buildSurface(p); err != nil {
+		fmt.Fprintf(os.Stderr, "bountykit: queue refresh skipped (%v)\n", err)
+	} else if len(plan.Items) > 0 {
+		fmt.Printf("queue     %d hypotheses refreshed in next.md\n", len(plan.Items))
+	}
 	return 0
 }
 
@@ -467,7 +505,51 @@ func intakeSurface(p *workspace.Program) ([]surface.NonWebAsset, []string) {
 	for _, c := range in.Candidates {
 		out = append(out, surface.NonWebAsset{Identifier: c.Identifier, Type: c.Type, Detail: "section: " + c.Section, Unverified: !in.TrustScope})
 	}
+	enrichNonWeb(p, out)
 	return out, in.Boundaries.Notes
+}
+
+// enrichNonWeb folds opt-in repository/contract findings into the queue.
+func enrichNonWeb(p *workspace.Program, out []surface.NonWebAsset) {
+	rep, err := nonweb.Load(p)
+	if err != nil {
+		return
+	}
+	repos := map[string]nonweb.Repo{}
+	for _, r := range rep.Repos {
+		repos[r.URL] = r
+	}
+	contracts := map[string]nonweb.Contract{}
+	for _, c := range rep.Contracts {
+		contracts[c.Address] = c
+	}
+	for i := range out {
+		a := &out[i]
+		if r, ok := repos[strings.TrimSuffix(a.Identifier, "/")]; ok {
+			if len(r.Risks) > 0 {
+				a.Detail += " | CI risks: " + strings.Join(r.Risks[:min(3, len(r.Risks))], "; ")
+				a.Boost += 15
+				a.Hint = "Review the flagged CI workflow first (" + r.Risks[0] + ")."
+			} else if r.Status == "local" {
+				a.Detail += " | repo scanned locally, no flagged CI pattern"
+			}
+			continue
+		}
+		if c, ok := contracts[a.Identifier]; ok {
+			a.Detail += " | chain " + c.Chain
+			if c.Explorer != "" {
+				a.Detail += " (" + c.Explorer + ")"
+			}
+			a.Boost += 5
+		}
+	}
+}
+
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }
 
 func writeJSON(path string, v any) error {

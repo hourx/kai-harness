@@ -251,6 +251,7 @@ func looseRisky(name string) bool {
 func AddNonWeb(p *Plan, assets []NonWebAsset, constraints []string) {
 	for _, a := range assets {
 		class, score := nonWebClass(a)
+		score += a.Boost
 		why := []string{"in-scope " + strings.ToLower(a.Type) + " asset from Phase 0 intake"}
 		if a.Detail != "" {
 			why = append(why, a.Detail)
@@ -260,6 +261,9 @@ func AddNonWeb(p *Plan, assets []NonWebAsset, constraints []string) {
 			why = append(why, "candidate from page text — verify against the policy first")
 		}
 		probe := probes[class]
+		if a.Hint != "" {
+			probe = a.Hint + " " + probe
+		}
 		for _, c := range constraints {
 			low := strings.ToLower(c)
 			if strings.Contains(low, "mainnet") && strings.Contains(low, "do not") {

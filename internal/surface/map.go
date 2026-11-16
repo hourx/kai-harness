@@ -18,6 +18,8 @@ type NonWebAsset struct {
 	Type       string `json:"type"`
 	Detail     string `json:"detail,omitempty"`
 	Unverified bool   `json:"unverified,omitempty"`
+	Boost      int    `json:"boost,omitempty"`
+	Hint       string `json:"hint,omitempty"`
 }
 
 // Ref is a path segment that looks like an object reference.

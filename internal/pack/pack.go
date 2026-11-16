@@ -143,6 +143,15 @@ func Build(p *workspace.Program, opts Options) (Result, error) {
 			return Result{}, err
 		}
 	}
+	for _, name := range []string{"nonweb.md", "nonweb.json"} {
+		b, err := os.ReadFile(filepath.Join(p.Dir, name))
+		if err != nil {
+			continue
+		}
+		if err := add(filepath.Join("bountykit", name), b); err != nil {
+			return Result{}, err
+		}
+	}
 
 	// The surface map and the ranked queue are the agent's entry point.
 	for _, name := range []string{"map.md", "map.json", "next.md", "next.json"} {
