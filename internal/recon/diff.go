@@ -28,14 +28,15 @@ type JSChange struct {
 // NewEndpoints, ChangedJS and NewParams is surface that did not exist in the
 // previous run — the highest-value input for a hunting session.
 type Diff struct {
-	From         string     `json:"from"`
-	To           string     `json:"to"`
-	Baseline     bool       `json:"baseline"`
-	NewHosts     []HostRef  `json:"new_hosts,omitempty"`
-	GoneHosts    []string   `json:"gone_hosts,omitempty"`
-	NewEndpoints []string   `json:"new_endpoints,omitempty"`
-	ChangedJS    []JSChange `json:"changed_js,omitempty"`
-	NewParams    []string   `json:"new_params,omitempty"`
+	From             string     `json:"from"`
+	To               string     `json:"to"`
+	Baseline         bool       `json:"baseline"`
+	NewHosts         []HostRef  `json:"new_hosts,omitempty"`
+	GoneHosts        []string   `json:"gone_hosts,omitempty"`
+	NewEndpoints     []string   `json:"new_endpoints,omitempty"`
+	RemovedEndpoints []string   `json:"removed_endpoints,omitempty"`
+	ChangedJS        []JSChange `json:"changed_js,omitempty"`
+	NewParams        []string   `json:"new_params,omitempty"`
 }
 
 func snapshotsDir(dir string) string { return filepath.Join(dir, "snapshots") }
@@ -103,6 +104,11 @@ func ComputeDiff(prev, cur *Store, prevTS, curTS string) Diff {
 			d.NewEndpoints = append(d.NewEndpoints, path)
 		}
 	}
+	for path := range prev.Endpoints {
+		if _, ok := cur.Endpoints[path]; !ok {
+			d.RemovedEndpoints = append(d.RemovedEndpoints, path)
+		}
+	}
 	prevParams := map[string]struct{}{}
 	for _, e := range prev.Endpoints {
 		for _, p := range e.Params {
@@ -133,6 +139,7 @@ func ComputeDiff(prev, cur *Store, prevTS, curTS string) Diff {
 	sort.Slice(d.NewHosts, func(i, j int) bool { return d.NewHosts[i].Host < d.NewHosts[j].Host })
 	sort.Strings(d.GoneHosts)
 	sort.Strings(d.NewEndpoints)
+	sort.Strings(d.RemovedEndpoints)
 	sort.Strings(d.NewParams)
 	sort.Slice(d.ChangedJS, func(i, j int) bool { return d.ChangedJS[i].URL < d.ChangedJS[j].URL })
 	return d
@@ -212,6 +219,20 @@ func (d Diff) Markdown() string {
 		}
 		if len(d.NewEndpoints) > limit {
 			fmt.Fprintf(&b, "- … %d more\n", len(d.NewEndpoints)-limit)
+		}
+		b.WriteString("\n")
+	}
+	if len(d.RemovedEndpoints) > 0 {
+		section("Endpoints no longer present", len(d.RemovedEndpoints))
+		limit := len(d.RemovedEndpoints)
+		if limit > 30 {
+			limit = 30
+		}
+		for _, e := range d.RemovedEndpoints[:limit] {
+			fmt.Fprintf(&b, "- `%s`\n", e)
+		}
+		if len(d.RemovedEndpoints) > limit {
+			fmt.Fprintf(&b, "- … %d more\n", len(d.RemovedEndpoints)-limit)
 		}
 		b.WriteString("\n")
 	}

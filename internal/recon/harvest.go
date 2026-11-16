@@ -53,6 +53,12 @@ func PathOf(rawurl string) (string, []string) {
 	return path, Uniq(params)
 }
 
+// isJSURL accepts versioned bundles whose query string follows ".js".
+func isJSURL(raw string) bool {
+	u, err := url.Parse(raw)
+	return err == nil && u.Path != "" && strings.HasSuffix(strings.ToLower(u.Path), ".js")
+}
+
 // looksLikeEndpoint rejects strings that JS regexes commonly mistake for
 // API paths: "/412", "/12345", "/ab", template junk and double slashes.
 func looksLikeEndpoint(path string) bool {

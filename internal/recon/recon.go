@@ -284,7 +284,7 @@ func Run(ctx context.Context, p *workspace.Program, opts Options) (Summary, erro
 	// tag would be a credential leak; the gate is the floor for every fetch.
 	jsSet := map[string]struct{}{}
 	for _, u := range urls {
-		if strings.HasSuffix(strings.ToLower(strings.TrimSuffix(u, "/")), ".js") {
+		if isJSURL(u) {
 			jsSet[u] = struct{}{}
 		}
 	}
@@ -326,9 +326,19 @@ func Run(ctx context.Context, p *workspace.Program, opts Options) (Summary, erro
 		h.Sources = Uniq(h.Sources, []string{"recon"})
 	}
 	for path, params := range paths {
+		if !looksLikeEndpoint(path) {
+			continue
+		}
 		e := store.Endpoint(path, now)
 		e.Params = Uniq(e.Params, params)
 		e.Sources = Uniq(e.Sources, []string{"url"})
+	}
+	// Drop artifacts left by older runs (numeric-only paths, template junk)
+	// so a tool fix actually cleans the state instead of accumulating noise.
+	for path := range store.Endpoints {
+		if !looksLikeEndpoint(path) {
+			delete(store.Endpoints, path)
+		}
 	}
 	for _, b := range bundles {
 		store.Bundle(b.URL, b.SHA, b.Bytes, now)

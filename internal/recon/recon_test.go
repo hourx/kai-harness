@@ -11,6 +11,21 @@ import (
 	"github.com/hourx/bountykit/internal/netx"
 )
 
+func TestIsJSURL(t *testing.T) {
+	cases := map[string]bool{
+		"https://testnet.ticko.xyz/assets/app.js":     true,
+		"https://testnet.ticko.xyz/assets/app.js?v=7": true,
+		"https://testnet.ticko.xyz/assets/app.JS#x":   true,
+		"https://testnet.ticko.xyz/dashboard":         false,
+		"https://testnet.ticko.xyz/app.jsx":           false,
+	}
+	for raw, want := range cases {
+		if got := isJSURL(raw); got != want {
+			t.Errorf("isJSURL(%q) = %v, want %v", raw, got, want)
+		}
+	}
+}
+
 func TestLooksLikeEndpoint(t *testing.T) {
 	cases := map[string]bool{
 		"/api/v1/users": true,
