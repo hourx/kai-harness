@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/hourx/bountykit/internal/workspace"
+	"github.com/hourx/kai/internal/workspace"
 )
 
 func TestScanRepoFindsWorkflowRisks(t *testing.T) {
@@ -63,7 +63,7 @@ jobs:
 }
 
 func TestAnalyzeWithoutCloneDoesNotNetwork(t *testing.T) {
-	t.Setenv("BOUNTYKIT_HOME", t.TempDir())
+	t.Setenv("KAI_HOME", t.TempDir())
 	p, err := workspace.Create("demo", workspace.Meta{})
 	if err != nil {
 		t.Fatal(err)

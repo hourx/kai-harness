@@ -8,7 +8,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/hourx/bountykit/internal/netx"
+	"github.com/hourx/kai/internal/netx"
 )
 
 // FetchOptions controls how much of a program's documentation is read.

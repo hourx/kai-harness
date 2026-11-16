@@ -18,10 +18,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/hourx/bountykit/internal/netx"
-	"github.com/hourx/bountykit/internal/scope"
-	"github.com/hourx/bountykit/internal/version"
-	"github.com/hourx/bountykit/internal/workspace"
+	"github.com/hourx/kai/internal/netx"
+	"github.com/hourx/kai/internal/scope"
+	"github.com/hourx/kai/internal/version"
+	"github.com/hourx/kai/internal/workspace"
 )
 
 // Options controls a recon run.
@@ -78,7 +78,7 @@ func Run(ctx context.Context, p *workspace.Program, opts Options) (Summary, erro
 	var sum Summary
 	sum.Domains = opts.Domains
 	if len(opts.Domains) == 0 && len(opts.SeedHosts) == 0 {
-		return sum, errors.New("no domains or seed hosts: pass --domain or import scope with: bountykit intake <url>")
+		return sum, errors.New("no domains or seed hosts: pass --domain or import scope with: kai intake <url>")
 	}
 	if opts.RPS <= 0 {
 		opts.RPS = 10
@@ -90,7 +90,7 @@ func Run(ctx context.Context, p *workspace.Program, opts Options) (Summary, erro
 		opts.MaxBundles = 100
 	}
 	if opts.UserAgent == "" {
-		opts.UserAgent = "bountykit/" + strings.SplitN(version.Version, "-", 2)[0] + " (+https://github.com/hourx/bountykit)"
+		opts.UserAgent = "kai/" + strings.SplitN(version.Version, "-", 2)[0] + " (+https://github.com/hourx/kai)"
 	}
 	logf := func(format string, args ...any) {
 		if opts.Log != nil {

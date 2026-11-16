@@ -1,4 +1,4 @@
-# bountykit — SPEC v0.8
+# kai — SPEC v0.8
 
 Deterministic context-pack builder for bug bounty.
 Fase yang dikerjakan tool: **Program Selection (bantu) → Pre-Hunt (kumpulkan) → Recon → Mapping**.
@@ -106,7 +106,7 @@ recon/ranked.txt    recon/smuggling.txt
 LEDGER.md
 ```
 
-Catatan: pipeline menyebut folder `targets-<name>/`; bountykit memakai `recon/` (konvensi `docs/BUG-BOUNTY.md`) dan **memetakan namanya di `BRIEF.md`**.
+Catatan: pipeline menyebut folder `targets-<name>/`; kai memakai `recon/` (konvensi `docs/BUG-BOUNTY.md`) dan **memetakan namanya di `BRIEF.md`**.
 
 ### 3.3 Toolchain VPS (dari `docs/BUG-BOUNTY.md`)
 
@@ -185,8 +185,8 @@ Kalau tidak ada, tool tetap jalan dengan sumber internal (crt.sh, HTTP GET, craw
 ### 4.3 Struktur repo
 
 ```
-bountykit/
-├── cmd/bountykit/main.go
+kai/
+├── cmd/kai/main.go
 ├── internal/
 │   ├── cli/          dispatch perintah
 │   ├── scope/        parse + match + gate
@@ -267,7 +267,7 @@ Batas bawah: item `surface-review` dengan skor < 30 dibuang. Kalau tidak ada yan
     │   ├── js.ts
     │   ├── endpoints.txt
     │   └── nuclei.txt
-    └── bountykit/
+    └── kai/
         ├── MANIFEST.json      ← daftar file + sha256
         ├── intake.json        ← Phase 0 (skor + alasan)
         ├── rules-diff.md      ← perubahan aturan
@@ -297,44 +297,44 @@ Alasan: automation selalu kalah cepat pada permukaan lama. Diff adalah satu-satu
 ## 7. Perintah
 
 ```
-bountykit version
-bountykit init   <program> [--platform h1|bugcrowd|direct] [--url U] [--verdict bounty|vdp|none]
-bountykit scope  <program> <host|cidr>          # exit 0 IN / 1 OUT / 2 error
-bountykit status [<program>]
-bountykit pack   <program> [-o dist] [--include-raw]
+kai version
+kai init   <program> [--platform h1|bugcrowd|direct] [--url U] [--verdict bounty|vdp|none]
+kai scope  <program> <host|cidr>          # exit 0 IN / 1 OUT / 2 error
+kai status [<program>]
+kai pack   <program> [-o dist] [--include-raw]
 ```
 
 v0.2:
 
 ```
-bountykit recon  <program> [--auto|--step]
-bountykit diff   <program>
+kai recon  <program> [--auto|--step]
+kai diff   <program>
 ```
 
 v0.3:
 
 ```
-bountykit session <program> [show|set|clear] [--har f] [--cookie s] [--header 'K: V']
-bountykit map    <program>
-bountykit next   <program>
-bountykit pack   <program> [--include-session]
+kai session <program> [show|set|clear] [--har f] [--cookie s] [--header 'K: V']
+kai map    <program>
+kai next   <program>
+kai pack   <program> [--include-session]
 ```
 
 v0.4:
 
 ```
-bountykit intake <hackerone-url|handle> [--name slug] [--dry-run] [--force]
-bountykit analyze <program> [--clone] [--refresh]        # repo + kontrak in-scope
-bountykit rules-diff <program>                   # delta aturan antar-intake
-bountykit boundaries <program>                   # aturan + batasan + verbatim
-bountykit intake <url> [--name slug] [--dry-run] [--force] [--trust-scope]
+kai intake <hackerone-url|handle> [--name slug] [--dry-run] [--force]
+kai analyze <program> [--clone] [--refresh]        # repo + kontrak in-scope
+kai rules-diff <program>                   # delta aturan antar-intake
+kai boundaries <program>                   # aturan + batasan + verbatim
+kai intake <url> [--name slug] [--dry-run] [--force] [--trust-scope]
                       [--max-links N] [--no-follow]
 ```
 
 v0.5:
 
 ```
-bountykit report <program>
+kai report <program>
 ```
 
 ---

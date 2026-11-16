@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hourx/bountykit/internal/recon"
+	"github.com/hourx/kai/internal/recon"
 )
 
 func TestModuleAndClass(t *testing.T) {

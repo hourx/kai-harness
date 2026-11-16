@@ -10,7 +10,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/hourx/bountykit/internal/netx"
+	"github.com/hourx/kai/internal/netx"
 )
 
 var (

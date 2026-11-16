@@ -8,7 +8,7 @@ import (
 )
 
 func TestExactHostsAndDeriveDomains(t *testing.T) {
-	t.Setenv("BOUNTYKIT_HOME", t.TempDir())
+	t.Setenv("KAI_HOME", t.TempDir())
 	p, err := Create("example", Meta{})
 	if err != nil {
 		t.Fatal(err)
@@ -35,7 +35,7 @@ https://other.test/path/*
 }
 
 func TestExactHostsEmpty(t *testing.T) {
-	t.Setenv("BOUNTYKIT_HOME", t.TempDir())
+	t.Setenv("KAI_HOME", t.TempDir())
 	p, err := Create("empty", Meta{})
 	if err != nil {
 		t.Fatal(err)

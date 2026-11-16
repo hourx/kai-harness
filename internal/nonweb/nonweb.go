@@ -17,8 +17,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hourx/bountykit/internal/program"
-	"github.com/hourx/bountykit/internal/workspace"
+	"github.com/hourx/kai/internal/program"
+	"github.com/hourx/kai/internal/workspace"
 )
 
 // Workflow is one CI workflow file and the risky patterns found in it.
@@ -78,7 +78,7 @@ func Analyze(ctx context.Context, p *workspace.Program, opts Options) (Report, e
 	rep := Report{Program: p.Name, Generated: time.Now().UTC(), Source: filepath.Join(p.Dir, "intake.json")}
 	raw, err := os.ReadFile(rep.Source)
 	if err != nil {
-		return rep, fmt.Errorf("no intake for %s — run: bountykit intake <url> --name %s", p.Name, p.Name)
+		return rep, fmt.Errorf("no intake for %s — run: kai intake <url> --name %s", p.Name, p.Name)
 	}
 	var in program.Intake
 	if err := json.Unmarshal(raw, &in); err != nil {
@@ -162,7 +162,7 @@ func Analyze(ctx context.Context, p *workspace.Program, opts Options) (Report, e
 		rep.Notes = append(rep.Notes, "Phase 0 published no source repository or contract address — nothing to analyse here")
 	}
 	if !opts.Clone {
-		rep.Notes = append(rep.Notes, "repositories were not cloned; run 'bountykit analyze <program> --clone' for workflow and manifest data")
+		rep.Notes = append(rep.Notes, "repositories were not cloned; run 'kai analyze <program> --clone' for workflow and manifest data")
 	}
 	return rep, nil
 }

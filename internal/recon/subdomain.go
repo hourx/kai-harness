@@ -10,7 +10,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/hourx/bountykit/internal/netx"
+	"github.com/hourx/kai/internal/netx"
 )
 
 // Discover collects candidate hosts for a base domain from every available

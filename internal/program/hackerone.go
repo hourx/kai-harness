@@ -10,15 +10,15 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hourx/bountykit/internal/netx"
-	"github.com/hourx/bountykit/internal/version"
+	"github.com/hourx/kai/internal/netx"
+	"github.com/hourx/kai/internal/version"
 )
 
 const h1GraphQL = "https://hackerone.com/graphql"
 
-// UserAgent identifies bountykit to public platform APIs.
+// UserAgent identifies kai to public platform APIs.
 func UserAgent() string {
-	return "bountykit/" + version.Version + " (+https://github.com/hourx/bountykit)"
+	return "kai/" + version.Version + " (+https://github.com/hourx/kai)"
 }
 
 var h1HandleRE = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_-]{0,99}$`)

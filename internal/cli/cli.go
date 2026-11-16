@@ -13,22 +13,22 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hourx/bountykit/internal/netx"
-	"github.com/hourx/bountykit/internal/nonweb"
-	"github.com/hourx/bountykit/internal/pack"
-	"github.com/hourx/bountykit/internal/program"
-	"github.com/hourx/bountykit/internal/recon"
-	"github.com/hourx/bountykit/internal/scope"
-	"github.com/hourx/bountykit/internal/session"
-	"github.com/hourx/bountykit/internal/surface"
-	"github.com/hourx/bountykit/internal/version"
-	"github.com/hourx/bountykit/internal/workspace"
+	"github.com/hourx/kai/internal/netx"
+	"github.com/hourx/kai/internal/nonweb"
+	"github.com/hourx/kai/internal/pack"
+	"github.com/hourx/kai/internal/program"
+	"github.com/hourx/kai/internal/recon"
+	"github.com/hourx/kai/internal/scope"
+	"github.com/hourx/kai/internal/session"
+	"github.com/hourx/kai/internal/surface"
+	"github.com/hourx/kai/internal/version"
+	"github.com/hourx/kai/internal/workspace"
 )
 
-const usageText = `bountykit — deterministic context packs for bug bounty
+const usageText = `kai — deterministic context packs for bug bounty
 
 Usage:
-  bountykit <command> [arguments]
+  kai <command> [arguments]
 
 Commands:
   init    <program> [--platform P] [--url U] [--verdict V] [--domain d,d]
@@ -56,7 +56,7 @@ Exit codes for scope:
   0  in scope      1  out of scope      2  usage or empty scope
 
 Environment:
-  BOUNTYKIT_HOME   state root (default: ./data)
+  KAI_HOME   state root (default: ./data)
 `
 
 // Run dispatches a command and returns the process exit code.
@@ -67,7 +67,7 @@ func Run(args []string) int {
 	}
 	switch args[0] {
 	case "version", "-v", "--version":
-		fmt.Println("bountykit " + version.String())
+		fmt.Println("kai " + version.String())
 		return 0
 	case "help", "-h", "--help":
 		fmt.Print(usageText)
@@ -99,14 +99,14 @@ func Run(args []string) int {
 	case "status":
 		return cmdStatus(args[1:])
 	default:
-		fmt.Fprintf(os.Stderr, "bountykit: unknown command %q\n\n", args[0])
+		fmt.Fprintf(os.Stderr, "kai: unknown command %q\n\n", args[0])
 		fmt.Fprint(os.Stderr, usageText)
 		return 2
 	}
 }
 
 func fail(err error) int {
-	fmt.Fprintln(os.Stderr, "bountykit:", err)
+	fmt.Fprintln(os.Stderr, "kai:", err)
 	return 2
 }
 
@@ -152,7 +152,7 @@ func cmdIntake(args []string) int {
 		return 2
 	}
 	if len(pos) != 1 {
-		return fail(errors.New("usage: bountykit intake <url|handle> [--name slug] [--dry-run] [--force] [--trust-scope]"))
+		return fail(errors.New("usage: kai intake <url|handle> [--name slug] [--dry-run] [--force] [--trust-scope]"))
 	}
 
 	platform, err := program.DetectPlatform(pos[0])
@@ -217,12 +217,12 @@ func cmdIntake(args []string) int {
 
 	fmt.Print(in.Markdown())
 	if rd, err := program.LoadRulesDiff(p.Dir); err == nil && rd.Changed() {
-		fmt.Println("\nwarning rules changed since the last intake — run: bountykit rules-diff " + slug)
+		fmt.Println("\nwarning rules changed since the last intake — run: kai rules-diff " + slug)
 	}
 	fmt.Printf("\nworkspace  %s\n", p.Dir)
 	sc := in.Scope()
 	if len(sc.In) > 0 {
-		fmt.Printf("next       bountykit recon %s   # %d seed host(s)\n", slug, len(sc.In))
+		fmt.Printf("next       kai recon %s   # %d seed host(s)\n", slug, len(sc.In))
 	} else if len(in.Candidates) > 0 {
 		fmt.Printf("next       verify %d candidate host(s) in policy.md, then rerun with --trust-scope\n", len(in.Candidates))
 	} else {
@@ -243,7 +243,7 @@ func cmdInit(args []string) int {
 		return 2
 	}
 	if len(pos) != 1 {
-		return fail(errors.New("usage: bountykit init <program> [--platform P] [--url U] [--verdict V] [--domain d]"))
+		return fail(errors.New("usage: kai init <program> [--platform P] [--url U] [--verdict V] [--domain d]"))
 	}
 	p, err := workspace.Create(pos[0], workspace.Meta{
 		Platform:     *platform,
@@ -256,13 +256,13 @@ func cmdInit(args []string) int {
 	}
 	fmt.Printf("created  %s\n", p.Dir)
 	fmt.Printf("next     edit %s/scope.txt and %s/out-of-scope.txt\n", p.Dir, p.Dir)
-	fmt.Printf("         bountykit scope %s <host>   # gate must pass before any request\n", p.Name)
+	fmt.Printf("         kai scope %s <host>   # gate must pass before any request\n", p.Name)
 	return 0
 }
 
 func cmdBoundaries(args []string) int {
 	if len(args) != 1 {
-		return fail(errors.New("usage: bountykit boundaries <program>"))
+		return fail(errors.New("usage: kai boundaries <program>"))
 	}
 	p, err := workspace.Open(args[0])
 	if err != nil {
@@ -270,7 +270,7 @@ func cmdBoundaries(args []string) int {
 	}
 	b, err := os.ReadFile(filepath.Join(p.Dir, "boundaries.md"))
 	if err != nil {
-		return fail(fmt.Errorf("no boundaries yet — run: bountykit intake <url> --name %s", p.Name))
+		return fail(fmt.Errorf("no boundaries yet — run: kai intake <url> --name %s", p.Name))
 	}
 	fmt.Print(string(b))
 	return 0
@@ -286,7 +286,7 @@ func cmdAnalyze(args []string) int {
 		return 2
 	}
 	if len(pos) != 1 {
-		return fail(errors.New("usage: bountykit analyze <program> [--clone] [--refresh]"))
+		return fail(errors.New("usage: kai analyze <program> [--clone] [--refresh]"))
 	}
 	p, err := workspace.Open(pos[0])
 	if err != nil {
@@ -303,7 +303,7 @@ func cmdAnalyze(args []string) int {
 	}
 	fmt.Print(rep.Markdown())
 	if plan, err := buildSurface(p); err != nil {
-		fmt.Fprintf(os.Stderr, "bountykit: queue refresh skipped (%v)\n", err)
+		fmt.Fprintf(os.Stderr, "kai: queue refresh skipped (%v)\n", err)
 	} else if len(plan.Items) > 0 {
 		fmt.Printf("queue     %d hypotheses refreshed in next.md\n", len(plan.Items))
 	}
@@ -312,7 +312,7 @@ func cmdAnalyze(args []string) int {
 
 func cmdRulesDiff(args []string) int {
 	if len(args) != 1 {
-		return fail(errors.New("usage: bountykit rules-diff <program>"))
+		return fail(errors.New("usage: kai rules-diff <program>"))
 	}
 	p, err := workspace.Open(args[0])
 	if err != nil {
@@ -320,7 +320,7 @@ func cmdRulesDiff(args []string) int {
 	}
 	d, err := program.LoadRulesDiff(p.Dir)
 	if err != nil {
-		return fail(fmt.Errorf("no rule diff yet — run: bountykit intake <url> --name %s", p.Name))
+		return fail(fmt.Errorf("no rule diff yet — run: kai intake <url> --name %s", p.Name))
 	}
 	fmt.Print(d.Markdown())
 	return 0
@@ -328,7 +328,7 @@ func cmdRulesDiff(args []string) int {
 
 func cmdScope(args []string) int {
 	if len(args) != 2 {
-		return fail(errors.New("usage: bountykit scope <program> <host|cidr>"))
+		return fail(errors.New("usage: kai scope <program> <host|cidr>"))
 	}
 	p, err := workspace.Open(args[0])
 	if err != nil {
@@ -372,7 +372,7 @@ func cmdRecon(args []string) int {
 		return 2
 	}
 	if len(pos) != 1 {
-		return fail(errors.New("usage: bountykit recon <program> [--domain d] [--rps N] [--step]"))
+		return fail(errors.New("usage: kai recon <program> [--domain d] [--rps N] [--step]"))
 	}
 	p, err := workspace.Open(pos[0])
 	if err != nil {
@@ -383,7 +383,7 @@ func cmdRecon(args []string) int {
 		domains = p.DeriveDomains()
 	}
 	if len(domains) == 0 && len(p.ExactHosts()) == 0 {
-		return fail(errors.New("no domains: pass --domain example.com, or import scope with: bountykit intake <hackerone-url>"))
+		return fail(errors.New("no domains: pass --domain example.com, or import scope with: kai intake <hackerone-url>"))
 	}
 
 	adapters := recon.Adapters()
@@ -422,14 +422,14 @@ func cmdRecon(args []string) int {
 		case errors.Is(err, session.ErrNone):
 			fmt.Println("session  none — unauthenticated surface only")
 		default:
-			fmt.Fprintf(os.Stderr, "bountykit: session unreadable (%v), continuing unauthenticated\n", err)
+			fmt.Fprintf(os.Stderr, "kai: session unreadable (%v), continuing unauthenticated\n", err)
 		}
 	} else {
 		fmt.Println("session  skipped (--no-session)")
 	}
 	if *step {
 		if !isTerminal(os.Stdin) {
-			fmt.Fprintln(os.Stderr, "bountykit: --step ignored (stdin is not a terminal)")
+			fmt.Fprintln(os.Stderr, "kai: --step ignored (stdin is not a terminal)")
 		} else {
 			opts.Confirm = promptConfirm
 		}
@@ -458,11 +458,11 @@ func cmdRecon(args []string) int {
 	}
 
 	if plan, err := buildSurface(p); err != nil {
-		fmt.Fprintf(os.Stderr, "bountykit: map/next failed (%v)\n", err)
+		fmt.Fprintf(os.Stderr, "kai: map/next failed (%v)\n", err)
 	} else if len(plan.Items) > 0 {
 		fmt.Printf("  queue: %d hypotheses, top %s (%s)\n", len(plan.Items), plan.Items[0].Target, plan.Items[0].Class)
 	}
-	fmt.Printf("next    bountykit next %s\n", p.Name)
+	fmt.Printf("next    kai next %s\n", p.Name)
 	return 0
 }
 
@@ -475,7 +475,7 @@ func buildSurface(p *workspace.Program) (*surface.Plan, error) {
 	}
 	nonWeb, constraints := intakeSurface(p)
 	if len(store.Endpoints) == 0 && len(store.Hosts) == 0 && len(nonWeb) == 0 {
-		return nil, errors.New("no assets yet — run: bountykit recon " + p.Name + " (or bountykit intake <url>)")
+		return nil, errors.New("no assets yet — run: kai recon " + p.Name + " (or kai intake <url>)")
 	}
 	now := time.Now().UTC()
 
@@ -590,7 +590,7 @@ func writeJSON(path string, v any) error {
 
 func cmdMap(args []string) int {
 	if len(args) != 1 {
-		return fail(errors.New("usage: bountykit map <program>"))
+		return fail(errors.New("usage: kai map <program>"))
 	}
 	p, err := workspace.Open(args[0])
 	if err != nil {
@@ -609,7 +609,7 @@ func cmdMap(args []string) int {
 
 func cmdNext(args []string) int {
 	if len(args) != 1 {
-		return fail(errors.New("usage: bountykit next <program>"))
+		return fail(errors.New("usage: kai next <program>"))
 	}
 	p, err := workspace.Open(args[0])
 	if err != nil {
@@ -637,7 +637,7 @@ func cmdSession(args []string) int {
 		return 2
 	}
 	if len(pos) == 0 {
-		return fail(errors.New("usage: bountykit session <program> [show|set|clear] [--har f] [--cookie s]"))
+		return fail(errors.New("usage: kai session <program> [show|set|clear] [--har f] [--cookie s]"))
 	}
 	p, err := workspace.Open(pos[0])
 	if err != nil {
@@ -732,7 +732,7 @@ func isTerminal(f *os.File) bool {
 
 func cmdDiff(args []string) int {
 	if len(args) != 1 {
-		return fail(errors.New("usage: bountykit diff <program>"))
+		return fail(errors.New("usage: kai diff <program>"))
 	}
 	p, err := workspace.Open(args[0])
 	if err != nil {
@@ -740,7 +740,7 @@ func cmdDiff(args []string) int {
 	}
 	d, err := recon.LoadDiff(p.Dir)
 	if err != nil {
-		return fail(fmt.Errorf("no diff yet — run: bountykit recon %s", p.Name))
+		return fail(fmt.Errorf("no diff yet — run: kai recon %s", p.Name))
 	}
 	fmt.Print(d.Markdown())
 	return 0
@@ -769,7 +769,7 @@ func cmdPack(args []string) int {
 		return 2
 	}
 	if len(pos) != 1 {
-		return fail(errors.New("usage: bountykit pack <program> [-o dist] [--include-raw] [--include-session]"))
+		return fail(errors.New("usage: kai pack <program> [-o dist] [--include-raw] [--include-session]"))
 	}
 	p, err := workspace.Open(pos[0])
 	if err != nil {
@@ -810,7 +810,7 @@ func cmdStatus(args []string) int {
 		return 0
 	}
 	if len(args) > 1 {
-		return fail(errors.New("usage: bountykit status [<program>]"))
+		return fail(errors.New("usage: kai status [<program>]"))
 	}
 
 	names, err := workspace.List()
@@ -818,7 +818,7 @@ func cmdStatus(args []string) int {
 		return fail(err)
 	}
 	if len(names) == 0 {
-		fmt.Println("no programs yet — run: bountykit init <program>")
+		fmt.Println("no programs yet — run: kai init <program>")
 		return 0
 	}
 	fmt.Printf("%-20s %-10s %-10s %6s %6s %6s %6s\n", "PROGRAM", "PLATFORM", "VERDICT", "SUBS", "LIVE", "URLS", "ENDS")

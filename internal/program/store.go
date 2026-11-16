@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hourx/bountykit/internal/workspace"
+	"github.com/hourx/kai/internal/workspace"
 )
 
 // Apply writes the intake artifacts into an existing workspace. It replaces

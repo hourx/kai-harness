@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hourx/bountykit/internal/netx"
+	"github.com/hourx/kai/internal/netx"
 )
 
 // DetectPlatform maps a URL to a reader. HackerOne is handled separately by

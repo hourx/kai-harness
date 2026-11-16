@@ -1,6 +1,6 @@
 // Package workspace owns the on-disk state for one bug bounty program.
 //
-// bountykit keeps its own state under data/<program>/ and never writes into a
+// kai keeps its own state under data/<program>/ and never writes into a
 // Kairos checkout. The pack command is what bridges the two.
 package workspace
 
@@ -40,8 +40,13 @@ var nameRE = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]{0,63}$`)
 // ErrExists is returned when init targets an existing program directory.
 var ErrExists = errors.New("program already exists")
 
-// Home returns the state root. BOUNTYKIT_HOME overrides the default ./data.
+// Home returns the state root. KAI_HOME overrides the default ./data.
+// KAI_HOME is still honoured for existing setups.
+// BOUNTYKIT_HOME is also accepted as a legacy alias.
 func Home() string {
+	if v := strings.TrimSpace(os.Getenv("KAI_HOME")); v != "" {
+		return v
+	}
 	if v := strings.TrimSpace(os.Getenv("BOUNTYKIT_HOME")); v != "" {
 		return v
 	}
@@ -134,7 +139,7 @@ func Open(name string) (*Program, error) {
 	b, err := os.ReadFile(filepath.Join(dir, "meta.json"))
 	if err != nil {
 		if os.IsNotExist(err) {
-			return nil, fmt.Errorf("unknown program %q (run: bountykit init %s)", name, name)
+			return nil, fmt.Errorf("unknown program %q (run: kai init %s)", name, name)
 		}
 		return nil, err
 	}
@@ -289,7 +294,7 @@ const scopeTemplate = `# One rule per line. Hosts or CIDRs only — no scheme, p
 # Wildcard:     *.example.com   (subdomains only, not the apex)
 # Network:      203.0.113.0/24
 #
-# bountykit refuses to test while this file has no rules.
+# kai refuses to test while this file has no rules.
 `
 
 const outOfScopeTemplate = `# Out-of-scope rules take precedence over scope.txt.

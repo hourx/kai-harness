@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hourx/bountykit/internal/recon"
+	"github.com/hourx/kai/internal/recon"
 )
 
 // Hypothesis is one ranked thing to test, with the evidence that put it there.
@@ -369,8 +369,8 @@ func (p *Plan) Markdown() string {
 		b.WriteString("No hypothesis cleared the evidence bar. That is a real result, not a missing run: ")
 		b.WriteString("nothing in this surface has an object reference, an ID parameter, a risky module name, ")
 		b.WriteString("or a host that behaves like it wants a login.\n\n")
-		b.WriteString("Widen the surface instead of guessing: run `bountykit recon` again after the target ships, ")
-		b.WriteString("or import a session with `bountykit session` so the authenticated area is mapped too.\n")
+		b.WriteString("Widen the surface instead of guessing: run `kai recon` again after the target ships, ")
+		b.WriteString("or import a session with `kai session` so the authenticated area is mapped too.\n")
 		return b.String()
 	}
 

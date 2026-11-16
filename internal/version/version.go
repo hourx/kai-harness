@@ -6,8 +6,8 @@ import (
 )
 
 // Version is the release tag. Overridden at build time with
-// -ldflags "-X github.com/hourx/bountykit/internal/version.Version=x.y.z".
-var Version = "0.8.15-dev"
+// -ldflags "-X github.com/hourx/kai/internal/version.Version=x.y.z".
+var Version = "0.9.0-dev"
 
 // String returns the version plus the VCS revision when available.
 func String() string {

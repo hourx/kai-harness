@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hourx/bountykit/internal/netx"
+	"github.com/hourx/kai/internal/netx"
 )
 
 func TestNormalizePath(t *testing.T) {
@@ -185,7 +185,7 @@ func TestProbeAgainstLocalServer(t *testing.T) {
 	defer srv.Close()
 	host := strings.TrimPrefix(srv.URL, "http://")
 
-	c := netx.New("bountykit-test", 20, nil)
+	c := netx.New("kai-test", 20, nil)
 	defer c.Close()
 
 	res := Probe(context.Background(), c, host, []string{"127.0.0.1"}, "")

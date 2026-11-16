@@ -19,7 +19,7 @@ func TestSessionAttached(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	c := New("bountykit-test", 50, nil)
+	c := New("kai-test", 50, nil)
 	defer c.Close()
 	c.SetSession(Session{
 		Cookies: "sid=abc; theme=dark",
@@ -35,7 +35,7 @@ func TestSessionAttached(t *testing.T) {
 	if gotAuth != "Bearer tok" {
 		t.Errorf("Authorization = %q", gotAuth)
 	}
-	if gotUA != "bountykit-test" {
+	if gotUA != "kai-test" {
 		t.Errorf("User-Agent = %q", gotUA)
 	}
 }
@@ -47,7 +47,7 @@ func TestSessionHostAllowList(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	c := New("bountykit-test", 50, nil)
+	c := New("kai-test", 50, nil)
 	defer c.Close()
 	c.SetSession(Session{Cookies: "sid=secret", Hosts: []string{"example.com"}})
 
@@ -66,7 +66,7 @@ func TestSessionNotSetByDefault(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	c := New("bountykit-test", 50, nil)
+	c := New("kai-test", 50, nil)
 	defer c.Close()
 	if _, err := c.Get(context.Background(), srv.URL, 1024); err != nil {
 		t.Fatal(err)
@@ -90,7 +90,7 @@ func TestRedirectOutOfScopeStops(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	c := New("bountykit-test", 50, func(u *url.URL) bool {
+	c := New("kai-test", 50, func(u *url.URL) bool {
 		return u.Host == targetURL.Host
 	})
 	defer c.Close()
@@ -106,7 +106,7 @@ func TestBodyCap(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	c := New("bountykit-test", 50, nil)
+	c := New("kai-test", 50, nil)
 	defer c.Close()
 	resp, err := c.Get(context.Background(), srv.URL, 100)
 	if err != nil {

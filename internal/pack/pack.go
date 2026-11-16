@@ -16,8 +16,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hourx/bountykit/internal/version"
-	"github.com/hourx/bountykit/internal/workspace"
+	"github.com/hourx/kai/internal/version"
+	"github.com/hourx/kai/internal/workspace"
 )
 
 // Artifacts are the recon files bugbounty-pipeline already knows how to read.
@@ -83,7 +83,7 @@ func Build(p *workspace.Program, opts Options) (Result, error) {
 
 	zw := zip.NewWriter(f)
 	root := p.Name + "/"
-	m := manifest{Program: p.Name, Generated: now.Format(time.RFC3339), Tool: "bountykit " + version.String()}
+	m := manifest{Program: p.Name, Generated: now.Format(time.RFC3339), Tool: "kai " + version.String()}
 
 	add := func(name string, data []byte) error {
 		h := sha256.Sum256(data)
@@ -127,19 +127,19 @@ func Build(p *workspace.Program, opts Options) (Result, error) {
 
 	// Diff is the anti-duplicate payload: what did not exist last run.
 	if b, err := os.ReadFile(filepath.Join(p.Dir, "diff.md")); err == nil {
-		if err := add("bountykit/diff.md", b); err != nil {
+		if err := add("kai/diff.md", b); err != nil {
 			return Result{}, err
 		}
 	}
 
 	// The structured Phase 0 intake is machine-readable for the agent.
 	if b, err := os.ReadFile(filepath.Join(p.Dir, "intake.json")); err == nil {
-		if err := add("bountykit/intake.json", b); err != nil {
+		if err := add("kai/intake.json", b); err != nil {
 			return Result{}, err
 		}
 	}
 	if b, err := os.ReadFile(filepath.Join(p.Dir, "rules-diff.md")); err == nil {
-		if err := add("bountykit/rules-diff.md", b); err != nil {
+		if err := add("kai/rules-diff.md", b); err != nil {
 			return Result{}, err
 		}
 	}
@@ -148,7 +148,7 @@ func Build(p *workspace.Program, opts Options) (Result, error) {
 		if err != nil {
 			continue
 		}
-		if err := add(filepath.Join("bountykit", name), b); err != nil {
+		if err := add(filepath.Join("kai", name), b); err != nil {
 			return Result{}, err
 		}
 	}
@@ -159,7 +159,7 @@ func Build(p *workspace.Program, opts Options) (Result, error) {
 		if err != nil {
 			continue
 		}
-		if err := add(filepath.Join("bountykit", name), b); err != nil {
+		if err := add(filepath.Join("kai", name), b); err != nil {
 			return Result{}, err
 		}
 	}
@@ -168,7 +168,7 @@ func Build(p *workspace.Program, opts Options) (Result, error) {
 	if opts.IncludeSession {
 		b, err := os.ReadFile(filepath.Join(p.Dir, "session.json"))
 		if err == nil {
-			if err := add("bountykit/session.json", b); err != nil {
+			if err := add("kai/session.json", b); err != nil {
 				return Result{}, err
 			}
 		}
@@ -194,7 +194,7 @@ func Build(p *workspace.Program, opts Options) (Result, error) {
 
 | When (UTC) | Event |
 | --- | --- |
-| %s | pack built by bountykit %s |
+| %s | pack built by kai %s |
 `, p.Name, now.Format(time.RFC3339), version.String())
 	if err := add("LEDGER.md", []byte(ledger)); err != nil {
 		return Result{}, err
@@ -211,7 +211,7 @@ func Build(p *workspace.Program, opts Options) (Result, error) {
 	if err != nil {
 		return Result{}, err
 	}
-	if err := add("bountykit/MANIFEST.json", mb); err != nil {
+	if err := add("kai/MANIFEST.json", mb); err != nil {
 		return Result{}, err
 	}
 
@@ -272,7 +272,7 @@ func brief(p *workspace.Program, now time.Time, opts Options) string {
 	fmt.Fprintf(&b, "# %s — handoff brief\n\n", p.Name)
 	fmt.Fprintf(&b, "| Field | Value |\n| --- | --- |\n")
 	fmt.Fprintf(&b, "| Generated | %s |\n", now.Format(time.RFC3339))
-	fmt.Fprintf(&b, "| Tool | bountykit %s |\n", version.String())
+	fmt.Fprintf(&b, "| Tool | kai %s |\n", version.String())
 	if p.Meta.Platform != "" {
 		fmt.Fprintf(&b, "| Platform | %s |\n", p.Meta.Platform)
 	}
@@ -283,7 +283,7 @@ func brief(p *workspace.Program, now time.Time, opts Options) string {
 	fmt.Fprintf(&b, "| Pack phase | 0–3 (scope, recon, mapping, queue) |\n")
 	switch {
 	case opts.IncludeSession:
-		b.WriteString("| Session | **included** in `bountykit/session.json` — delete after use |\n\n")
+		b.WriteString("| Session | **included** in `kai/session.json` — delete after use |\n\n")
 	case reconUsedSession(p):
 		su := sessionUse(p)
 		fmt.Fprintf(&b, "| Session | recon used authenticated context (%d cookies, %d headers) at %s — **not included**; agent must supply its own session |\n\n",
@@ -332,7 +332,7 @@ func brief(p *workspace.Program, now time.Time, opts Options) string {
 		}
 		b.WriteString("\nFull scorecard: `program.md`. Policy, out-of-scope classes and required headers: `policy.md`.\n\n")
 	} else {
-		b.WriteString("No Phase 0 intake for this program. Run `bountykit intake <hackerone-url>` ")
+		b.WriteString("No Phase 0 intake for this program. Run `kai intake <hackerone-url>` ")
 		b.WriteString("before choosing what to hunt — payout, crowding and published scope all matter.\n\n")
 	}
 
@@ -371,7 +371,7 @@ func brief(p *workspace.Program, now time.Time, opts Options) string {
 			text = strings.TrimSpace(text[i:])
 		}
 		if len(text) > 2500 {
-			text = text[:2500] + "\n\n… truncated, see `bountykit/rules-diff.md`\n"
+			text = text[:2500] + "\n\n… truncated, see `kai/rules-diff.md`\n"
 		}
 		b.WriteString("## Rule changes\n\n")
 		b.WriteString(text)
@@ -426,17 +426,17 @@ func brief(p *workspace.Program, now time.Time, opts Options) string {
 			}
 			b.WriteString("\nFirst probe for the top item: ")
 			b.WriteString(n.Items[0].Probe)
-			b.WriteString("\n\nFull queue and reasons: `bountykit/next.md`. ")
+			b.WriteString("\n\nFull queue and reasons: `kai/next.md`. ")
 			b.WriteString("The ranking is evidence-weighted, not a verdict — still verify each one.\n\n")
 		}
 	case queueBuilt:
 		b.WriteString("The queue was built and came back empty: no endpoint here has an object ")
 		b.WriteString("reference, an ID parameter or a risky module name. That is a finding about ")
-		b.WriteString("the surface, not a broken run. `bountykit/next.md` explains it in place.\n\n")
+		b.WriteString("the surface, not a broken run. `kai/next.md` explains it in place.\n\n")
 	default:
-		b.WriteString("No ranked queue yet. Run `bountykit map ")
+		b.WriteString("No ranked queue yet. Run `kai map ")
 		b.WriteString(p.Name)
-		b.WriteString("` and `bountykit next ")
+		b.WriteString("` and `kai next ")
 		b.WriteString(p.Name)
 		b.WriteString("` before hunting, so effort follows evidence instead of guessing.\n\n")
 	}
@@ -449,14 +449,14 @@ func brief(p *workspace.Program, now time.Time, opts Options) string {
 			text = strings.TrimSpace(text[i:])
 		}
 		if len(text) > 6000 {
-			text = text[:6000] + "\n\n… truncated, see `bountykit/diff.md`\n"
+			text = text[:6000] + "\n\n… truncated, see `kai/diff.md`\n"
 		}
 		b.WriteString(text)
 		b.WriteString("\n\n")
 		b.WriteString("> Anything listed as new is surface no other hunter has scanned yet. ")
 		b.WriteString("Start there, not at the top of `recon/live.txt`.\n\n")
 	} else {
-		fmt.Fprintf(&b, "No recon run yet for `%s`. Run `bountykit recon %s` before hunting ", p.Name, p.Name)
+		fmt.Fprintf(&b, "No recon run yet for `%s`. Run `kai recon %s` before hunting ", p.Name, p.Name)
 		b.WriteString("so the agent knows what is new rather than guessing.\n\n")
 	}
 

@@ -1,4 +1,4 @@
-# bountykit
+# kai
 
 Pembantu Phase 0–3 bug bounty: membaca aturan program, memetakan permukaan,
 lalu menghasilkan satu ZIP yang langsung bisa dipakai Kairos (`bugbounty-pipeline`).
@@ -18,7 +18,7 @@ Contoh memakai program HackerOne. Ganti `temu` dengan programmu.
 ### 0. Cek dulu layak tidaknya (tanpa bikin apa-apa)
 
 ```bash
-bountykit intake 'https://hackerone.com/temu?type=team' --dry-run
+kai intake 'https://hackerone.com/temu?type=team' --dry-run
 ```
 
 Keluar scorecard: reward, jumlah report 90 hari, efficiency, dan scope yang
@@ -27,7 +27,7 @@ publish. Verdict `go` / `careful` / `skip` / `vdp-only` / `review`.
 ### 1. Buat workspace
 
 ```bash
-bountykit intake 'https://hackerone.com/temu?type=team'
+kai intake 'https://hackerone.com/temu?type=team'
 ```
 
 Terbuat `data/temu/` berisi `scope.txt`, `out-of-scope.txt`, `policy.md`,
@@ -44,7 +44,7 @@ dan di scorecard. Matikan dengan `--no-follow`, atau ubah batasnya dengan
 ### 2. Baca batasan sebelum apa pun
 
 ```bash
-bountykit boundaries temu
+kai boundaries temu
 ```
 
 Ini **kontrak program**: aturan mainnet/testnet, PoC, KYC, header wajib, dan
@@ -55,8 +55,8 @@ Yang tidak dipublikasikan ditulis `unknown` / "not stated" — bukan izin.
 
 ```bash
 cat data/temu/scope.txt data/temu/out-of-scope.txt
-bountykit scope temu www.temu.com     # exit 0=IN, 1=OUT, 2=error
-bountykit scope temu evil.temu.com.evil.test
+kai scope temu www.temu.com     # exit 0=IN, 1=OUT, 2=error
+kai scope temu evil.temu.com.evil.test
 ```
 
 `out-of-scope.txt` selalu menang. Empty `scope.txt` membuat recon menolak jalan.
@@ -64,10 +64,10 @@ bountykit scope temu evil.temu.com.evil.test
 ### 4. (Opsional) Impor session kalau mau petakan area login
 
 ```bash
-bountykit session temu set --har ~/Downloads/burp.har
-bountykit session temu show                      # nilai disembunyikan
-bountykit recon temu                             # otomatis pakai session
-bountykit session temu clear
+kai session temu set --har ~/Downloads/burp.har
+kai session temu show                      # nilai disembunyikan
+kai recon temu                             # otomatis pakai session
+kai session temu clear
 ```
 
 Tanpa session, yang dipetakan hanya permukaan unauth. `--no-session` untuk
@@ -76,9 +76,9 @@ memaksa recon tanpa session.
 ### 5A. Jalur web — recon
 
 ```bash
-bountykit recon temu                 # crt.sh + Cert Spotter (+adapter kalau ada)
-bountykit recon temu --step          # mode belajar: berhenti tiap fase
-bountykit diff temu                  # apa yang baru sejak run terakhir
+kai recon temu                 # crt.sh + Cert Spotter (+adapter kalau ada)
+kai recon temu --step          # mode belajar: berhenti tiap fase
+kai diff temu                  # apa yang baru sejak run terakhir
 ```
 
 Host eksak dari `scope.txt` diprobes langsung. Wildcard baru di-enumerasi
@@ -90,9 +90,9 @@ Untuk program seperti Uniswap (Cantina), Beanstalk (Immunefi), Hyperliquid,
 Ethereum, atau Muse:
 
 ```bash
-bountykit analyze uniswap             # tanpa clone: lihat daftar aset dulu
-bountykit analyze uniswap --clone     # clone repo in-scope ke data/<program>/repos/
-bountykit analyze uniswap --refresh   # git pull repo yang sudah ada
+kai analyze uniswap             # tanpa clone: lihat daftar aset dulu
+kai analyze uniswap --clone     # clone repo in-scope ke data/<program>/repos/
+kai analyze uniswap --refresh   # git pull repo yang sudah ada
 ```
 
 `analyze` membaca workflow CI (mis. `pull_request_target`, `${{ github.event.* }}`,
@@ -102,8 +102,8 @@ kontrak beserta explorer-nya. Hasilnya `nonweb.md` / `nonweb.json`.
 ### 6. Bangun peta dan antrian tes
 
 ```bash
-bountykit map temu                   # modul, object ref, parameter, aset non-web
-bountykit next temu                  # antrian terurut + alasan + probe pertama
+kai map temu                   # modul, object ref, parameter, aset non-web
+kai next temu                  # antrian terurut + alasan + probe pertama
 ```
 
 `recon` dan `analyze` otomatis menyegarkan keduanya. `next` memasukkan aset
@@ -113,7 +113,7 @@ bilang "use testnet or a local fork only" di probe pertamanya.
 ### 7. Cek perubahan aturan
 
 ```bash
-bountykit rules-diff temu
+kai rules-diff temu
 ```
 
 Tiap intake di-snapshot ke `intakes/<ts>/`. Kalau program mencabut host dari
@@ -123,8 +123,8 @@ scope, mengubah reward, atau mengedit policy, ini muncul di sini dan di
 ### 8. Pack untuk Kairos
 
 ```bash
-bountykit pack temu -o dist
-bountykit pack temu -o dist --include-session   # HANYA kalau agent perlu auth
+kai pack temu -o dist
+kai pack temu -o dist --include-session   # HANYA kalau agent perlu auth
 ```
 
 Lalu di mesin Kairos:
@@ -142,24 +142,24 @@ aturan → scope → Start here (ranked) → diff permukaan.
 
 ```bash
 # 1. baca (verdict selalu "review" untuk sumber teks)
-bountykit intake cantina.xyz/bounties/f9df94db-c7b1-434b-bb06-d1360abdd1be --dry-run
+kai intake cantina.xyz/bounties/f9df94db-c7b1-434b-bb06-d1360abdd1be --dry-run
 
 # 2. buat workspace
-bountykit intake cantina.xyz/bounties/f9df94db-c7b1-434b-bb06-d1360abdd1be \
+kai intake cantina.xyz/bounties/f9df94db-c7b1-434b-bb06-d1360abdd1be \
   --name uniswap
 
 # 3. baca batasan
-bountykit boundaries uniswap
+kai boundaries uniswap
 
 # 4. host dari teks prose MASIH kandidat, belum aktif.
 #    Verifikasi di policy.md, lalu aktifkan kalau setuju:
-bountykit intake cantina.xyz/bounties/f9df94db-c7b1-434b-bb06-d1360abdd1be \
+kai intake cantina.xyz/bounties/f9df94db-c7b1-434b-bb06-d1360abdd1be \
   --name uniswap --force --trust-scope
 
 # 5. lanjut seperti biasa
-bountykit analyze uniswap --clone
-bountykit next uniswap
-bountykit pack uniswap -o dist
+kai analyze uniswap --clone
+kai next uniswap
+kai pack uniswap -o dist
 ```
 
 Sumber yang didukung: HackerOne (GraphQL terstruktur), Cantina, Immunefi,
@@ -237,13 +237,13 @@ dist/<program>_<ts>.zip
     BRIEF.md  program.md  scope.txt  out-of-scope.txt
     boundaries.md  policy.md  LEDGER.md
     recon/                   sesuai konvensi Kairos
-    bountykit/
+    kai/
       MANIFEST.json  intake.json  rules-diff.md
       diff.md  map.json/.md  next.json/.md  nonweb.json/.md
       session.json           hanya dengan --include-session
 ```
 
-`BOUNTYKIT_HOME` mengganti root `./data`.
+`KAI_HOME` mengganti root `./data`.
 
 Pipeline memakai folder `targets-<name>/`; pack ini memakai `recon/`
 (konvensi `docs/BUG-BOUNTY.md`). Pemetaan namanya ditulis di `BRIEF.md`.
@@ -265,18 +265,38 @@ Pipeline memakai folder `targets-<name>/`; pack ini memakai `recon/`
 
 ---
 
-## Build
+## Install
 
 ```bash
-go build -o bin/bountykit ./cmd/bountykit
+# paling cepat kalau Go sudah ada
+go install github.com/hourx/kai/cmd/kai@latest
+
+# dari source
+git clone https://github.com/hourx/kai.git
+cd kai
+go build -o bin/kai ./cmd/kai
 go test ./...
 ```
 
-Go 1.21+. Tanpa cgo, tanpa dependency eksternal.
+Go 1.21+. Tanpa cgo, tanpa dependency eksternal. Biner bisa juga diunduh dari
+GitHub Releases (rencana).
+
+### Soal `npx kai`
+
+Belum tersedia, dan itu bukan satu hal yang sama dengan tool ini:
+
+- **npm** = package manager untuk ekosistem **Node.js**
+- **npx** = runner yang mengunduh lalu menjalankan paket npm
+- **kai** = biner **Go**, bukan paket npm / bukan library
+
+Supaya `npx kai` bisa dipakai, perlu paket npm kecil (mis. `@hourx/kai`) yang
+cuma mengunduh biner Go dari GitHub Releases lalu memanggilnya. Itu bisa
+dibuat belakangan setelah rilis stabil — bukan mengubah kai jadi library.
 
 | Versi | Isi |
 |---|---|
 | v0.1–v0.3 | scope gate, pack, recon, diff, session, map, next |
 | v0.4–v0.6 | intake H1 + multi-sumber, boundaries verbatim |
 | v0.7–v0.8 | rule diff, aset non-web, analisis repo/kontrak, referensi dokumentasi |
-| v0.9 | `report`, adapter penuh |
+| v0.9 | rename identitas `kai`, module & remote GitHub |
+| v1.0 | `kai run`, `kai audit`, config, penguraian repo organisasi |
