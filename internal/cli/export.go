@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"bytes"
 	"errors"
 	"flag"
 	"fmt"
@@ -31,6 +32,18 @@ func cmdExport(args []string) int {
 	}
 	if err := os.MkdirAll(*to, 0o755); err != nil {
 		return fail(err)
+	}
+
+	// A next.json written by an older kai has no tags/clusters. Regenerate it
+	// so agents never fall back to dumping 150 raw hypotheses. This is still
+	// deterministic context generation — no requests, no hunting.
+	nb, nerr := os.ReadFile(filepath.Join(p.Dir, "next.json"))
+	if nerr != nil || !bytes.Contains(nb, []byte(`"clusters"`)) {
+		if _, e := buildSurface(p); e != nil {
+			fmt.Fprintf(os.Stderr, "kai: next.json schema lama dan regenerate gagal (%v) — jalankan: kai recon %s\n", e, p.Name)
+		} else {
+			fmt.Println("regenerated next.json (tags + clusters)")
+		}
 	}
 
 	brief, err := program.CompactBrief(p.Dir)
