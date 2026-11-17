@@ -88,8 +88,13 @@ func ValidationGate(pDir string) (string, error) {
 		gateSummary(dupes, "tidak ada catatan duplikat"),
 		gateSummary(lessons, "tidak ada pelajaran tercatat"))
 
-	fmt.Fprintf(&out, "5. **Kanal submit**: apakah ini kanal resmi?\n   - kanal: %s\n   - kontak: %s (kontak bukan kanal)\n   - JAWABAN: ______\n\n",
-		submission, contacts)
+	contactLine := contacts + " (kontak bukan kanal)"
+	if strings.HasPrefix(submission, "email:") && len(in.Boundaries.SubmissionContact) == 1 &&
+		strings.Contains(submission, in.Boundaries.SubmissionContact[0]) {
+		contactLine = "sama dengan kanal di atas — bukan kontak tambahan"
+	}
+	fmt.Fprintf(&out, "5. **Kanal submit**: apakah ini kanal resmi?\n   - kanal: %s\n   - kontak: %s\n   - JAWABAN: ______\n\n",
+		submission, contactLine)
 
 	fmt.Fprintf(&out, "6. **Penyerang & korban**: siapa yang harus punya akses, dan siapa yang terdampak?\n   - JAWABAN: ______\n\n")
 	fmt.Fprintf(&out, "7. **Reproduksi 3x**: apakah bisa diulang dari nol dengan langkah tertulis?\n   - JAWABAN: ______\n")
