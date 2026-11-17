@@ -378,6 +378,8 @@ func scanRepo(r *Repo, logf func(format string, args ...any)) {
 			if curlBashRE.MatchString(text) {
 				w.Risks = append(w.Risks, "remote script piped into a shell")
 			}
+			w.Triggers = uniqueStrings(w.Triggers)
+			w.Risks = uniqueStrings(w.Risks)
 			r.Workflows = append(r.Workflows, w)
 			r.Risks = append(r.Risks, w.Risks...)
 		}
@@ -415,8 +417,21 @@ func scanRepo(r *Repo, logf func(format string, args ...any)) {
 	}
 	sort.Strings(r.Manifests)
 	sort.Strings(r.EntryPoints)
-	sort.Strings(r.Risks)
+	r.Risks = uniqueStrings(r.Risks)
 	logf("  scanned %s: %d workflow(s), %d manifest(s)", r.Slug, len(r.Workflows), len(r.Manifests))
+}
+
+func uniqueStrings(in []string) []string {
+	seen := map[string]bool{}
+	out := make([]string, 0, len(in))
+	for _, v := range in {
+		if v == "" || seen[v] {
+			continue
+		}
+		seen[v] = true
+		out = append(out, v)
+	}
+	return out
 }
 
 // Save writes nonweb.json and nonweb.md into the program directory.
