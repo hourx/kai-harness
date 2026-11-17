@@ -107,7 +107,7 @@ func Build(p *workspace.Program, opts Options) (Result, error) {
 		return add(name, b)
 	}
 
-	for _, name := range []string{"program.md", "scope.txt", "out-of-scope.txt", "policy.md", "boundaries.md"} {
+	for _, name := range []string{"program.md", "scope.txt", "out-of-scope.txt", "policy.md", "boundaries.md", "brief-compact.md"} {
 		if _, err := os.Stat(filepath.Join(p.Dir, name)); err != nil {
 			continue
 		}
@@ -128,6 +128,16 @@ func Build(p *workspace.Program, opts Options) (Result, error) {
 	// Diff is the anti-duplicate payload: what did not exist last run.
 	if b, err := os.ReadFile(filepath.Join(p.Dir, "diff.md")); err == nil {
 		if err := add("bountykit/diff.md", b); err != nil {
+			return Result{}, err
+		}
+	}
+
+	for _, name := range []string{"findings/ledger.json", "findings/lessons.md", "findings/dupes.md"} {
+		b, err := os.ReadFile(filepath.Join(p.Dir, name))
+		if err != nil {
+			continue
+		}
+		if err := add(filepath.Join("bountykit", filepath.Base(name)), b); err != nil {
 			return Result{}, err
 		}
 	}
@@ -334,6 +344,37 @@ func brief(p *workspace.Program, now time.Time, opts Options) string {
 	} else {
 		b.WriteString("No Phase 0 intake for this program. Run `kai intake <hackerone-url>` ")
 		b.WriteString("before choosing what to hunt — payout, crowding and published scope all matter.\n\n")
+	}
+
+	if raw, err := os.ReadFile(filepath.Join(p.Dir, "findings/ledger.json")); err == nil {
+		var tl struct {
+			Findings []struct {
+				ID     string `json:"id"`
+				Status string `json:"status"`
+				Target string `json:"target"`
+			} `json:"findings"`
+			Lessons []string `json:"lessons"`
+		}
+		if json.Unmarshal(raw, &tl) == nil && len(tl.Findings) > 0 {
+			counts := map[string]int{}
+			for _, f := range tl.Findings {
+				counts[f.Status]++
+			}
+			keys := make([]string, 0, len(counts))
+			for k := range counts {
+				keys = append(keys, k)
+			}
+			sort.Strings(keys)
+			b.WriteString("## Triage state\n\n")
+			parts := []string{}
+			for _, k := range keys {
+				parts = append(parts, fmt.Sprintf("%s %d", k, counts[k]))
+			}
+			b.WriteString(strings.Join(parts, " · ") + "\n\n")
+			if len(tl.Lessons) > 0 {
+				fmt.Fprintf(&b, "%d lesson(s) recorded — see `bountykit/lessons.md`.\n\n", len(tl.Lessons))
+			}
+		}
 	}
 
 	if bd := pi.Boundaries; bd.MainnetTesting != "" {

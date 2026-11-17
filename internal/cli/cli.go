@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/hourx/kai/internal/audit"
+	"github.com/hourx/kai/internal/backup"
 	"github.com/hourx/kai/internal/doctor"
 	"github.com/hourx/kai/internal/netx"
 	"github.com/hourx/kai/internal/nonweb"
@@ -24,6 +25,7 @@ import (
 	"github.com/hourx/kai/internal/scope"
 	"github.com/hourx/kai/internal/session"
 	"github.com/hourx/kai/internal/surface"
+	"github.com/hourx/kai/internal/triage"
 	"github.com/hourx/kai/internal/version"
 	"github.com/hourx/kai/internal/workspace"
 )
@@ -44,6 +46,11 @@ Commands:
   intake  <url|handle> [--name slug] [--dry-run] [--force] [--trust-scope]
                     [--max-links N] [--no-follow]                Phase 0: read program
   boundaries <program>                                      print scope limits & rules
+  brief    <program> [--out file]                            compact context card (~300 tokens)
+  track    <program> list|submit|status|payout|retest        submission & triage ledger
+  backup   [--out file] [--include-session] [--include-repos]
+                                                             snapshot data/ + dist/
+  restore  <file.tar.gz> [--dest dir]                        restore a snapshot
   analyze   <program> [--clone] [--refresh]                 inspect in-scope repos/contracts
   rules-diff <program>                                      what changed since last intake
   scope   <program> <host|cidr>                              scope gate (IN/OUT)
@@ -94,6 +101,14 @@ func Run(args []string) int {
 		return cmdScope(args[1:])
 	case "boundaries":
 		return cmdBoundaries(args[1:])
+	case "brief":
+		return cmdBrief(args[1:])
+	case "track":
+		return cmdTrack(args[1:])
+	case "backup":
+		return cmdBackup(args[1:])
+	case "restore":
+		return cmdRestore(args[1:])
 	case "analyze":
 		return cmdAnalyze(args[1:])
 	case "rules-diff":
@@ -150,6 +165,207 @@ func split(args []string, valueFlags map[string]bool) (pos, rest []string) {
 		pos = append(pos, a)
 	}
 	return pos, rest
+}
+
+func cmdBrief(args []string) int {
+	pos, rest := split(args, map[string]bool{"out": true})
+	fs := flag.NewFlagSet("brief", flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+	outFlag := fs.String("out", "", "write to this file instead of <program>/brief-compact.md")
+	if err := fs.Parse(rest); err != nil {
+		return 2
+	}
+	if len(pos) != 1 {
+		return fail(errors.New("usage: kai brief <program> [--out file]"))
+	}
+	p, err := workspace.Open(pos[0])
+	if err != nil {
+		return fail(err)
+	}
+	text, err := program.CompactBrief(p.Dir)
+	if err != nil {
+		return fail(err)
+	}
+	dest := *outFlag
+	if dest == "" {
+		dest = filepath.Join(p.Dir, "brief-compact.md")
+	}
+	if err := os.WriteFile(dest, []byte(text), 0o600); err != nil {
+		return fail(err)
+	}
+	fmt.Print(text)
+	return 0
+}
+
+// writeCompact refreshes the agent-facing card after state changes.
+func writeCompact(p *workspace.Program) {
+	text, err := program.CompactBrief(p.Dir)
+	if err != nil {
+		return
+	}
+	_ = os.WriteFile(filepath.Join(p.Dir, "brief-compact.md"), []byte(text), 0o600)
+}
+
+func cmdBackup(args []string) int {
+	pos, rest := split(args, map[string]bool{"out": true})
+	fs := flag.NewFlagSet("backup", flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+	outFlag := fs.String("out", "", "archive path (default: kai-backup-<ts>.tar.gz)")
+	withSession := fs.Bool("include-session", false, "include session.json (contains live credentials)")
+	withRepos := fs.Bool("include-repos", false, "include cloned repositories")
+	if err := fs.Parse(rest); err != nil {
+		return 2
+	}
+	if len(pos) != 0 {
+		return fail(errors.New("usage: kai backup [--out file] [--include-session] [--include-repos]"))
+	}
+	root, err := os.Getwd()
+	if err != nil {
+		return fail(err)
+	}
+	path, err := backup.Create(root, backup.Options{
+		Out:            *outFlag,
+		DataDir:        workspace.Home(),
+		DistDir:        filepath.Join(root, "dist"),
+		IncludeSession: *withSession,
+		IncludeRepos:   *withRepos,
+	})
+	if err != nil {
+		return fail(err)
+	}
+	info, _ := os.Stat(path)
+	fmt.Printf("backup  %s", path)
+	if info != nil {
+		fmt.Printf(" (%d bytes)", info.Size())
+	}
+	fmt.Println()
+	if !*withSession {
+		fmt.Println("session.json excluded — restore it separately with: kai session <program> set --har ...")
+	}
+	return 0
+}
+
+func cmdRestore(args []string) int {
+	pos, rest := split(args, map[string]bool{"dest": true})
+	fs := flag.NewFlagSet("restore", flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+	destFlag := fs.String("dest", ".", "directory to restore into")
+	if err := fs.Parse(rest); err != nil {
+		return 2
+	}
+	if len(pos) != 1 {
+		return fail(errors.New("usage: kai restore <file.tar.gz> [--dest dir]"))
+	}
+	n, err := backup.Restore(pos[0], *destFlag)
+	if err != nil {
+		return fail(err)
+	}
+	fmt.Printf("restored %d file(s) into %s\n", n, *destFlag)
+	fmt.Println("next    kai doctor && kai status")
+	return 0
+}
+
+func cmdTrack(args []string) int {
+	pos, rest := split(args, map[string]bool{"platform": true, "note": true, "amount": true})
+	fs := flag.NewFlagSet("track", flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+	platformFlag := fs.String("platform", "", "platform used for submission")
+	noteFlag := fs.String("note", "", "triager note / reason")
+	amountFlag := fs.Int("amount", 0, "payout amount")
+	if err := fs.Parse(rest); err != nil {
+		return 2
+	}
+	if len(pos) < 2 {
+		return fail(errors.New("usage: kai track <program> list|submit|status|payout|retest ..."))
+	}
+	p, err := workspace.Open(pos[0])
+	if err != nil {
+		return fail(err)
+	}
+	ledger, err := triage.Load(p.Dir)
+	if err != nil {
+		return fail(err)
+	}
+	action := pos[1]
+
+	switch action {
+	case "list":
+		fmt.Print(ledger.Markdown())
+		return 0
+	case "submit":
+		if len(pos) < 3 {
+			return fail(errors.New("usage: kai track <program> submit <queue-number|target>"))
+		}
+		target, class, probe, index := pos[2], "", "", 0
+		if idx, e := strconv.Atoi(pos[2]); e == nil {
+			b, e := os.ReadFile(filepath.Join(p.Dir, "next.json"))
+			if e != nil {
+				return fail(errors.New("no next.json — run: kai next " + p.Name))
+			}
+			var plan struct {
+				Items []struct {
+					Target string `json:"target"`
+					Class  string `json:"class"`
+					Probe  string `json:"probe"`
+				} `json:"items"`
+			}
+			if e := json.Unmarshal(b, &plan); e != nil || idx < 1 || idx > len(plan.Items) {
+				return fail(fmt.Errorf("no queue item %d (run: kai next %s)", idx, p.Name))
+			}
+			it := plan.Items[idx-1]
+			target, class, probe, index = it.Target, it.Class, it.Probe, idx
+		}
+		platform := *platformFlag
+		if platform == "" {
+			platform = p.Meta.Platform
+		}
+		f, err := ledger.Add(target, class, probe, platform, index)
+		if err != nil {
+			return fail(err)
+		}
+		if err := ledger.Save(p.Dir); err != nil {
+			return fail(err)
+		}
+		fmt.Printf("submitted %s — %s\n", f.ID, f.Target)
+		return 0
+	case "status":
+		if len(pos) < 4 {
+			return fail(errors.New("usage: kai track <program> status <id> <duplicate|informative|needs-info|...> [--note text]"))
+		}
+		if err := ledger.SetStatus(pos[2], pos[3], *noteFlag); err != nil {
+			return fail(err)
+		}
+	case "payout":
+		if len(pos) < 3 || *amountFlag <= 0 {
+			return fail(errors.New("usage: kai track <program> payout <id> --amount N"))
+		}
+		if err := ledger.Payout(pos[2], *amountFlag); err != nil {
+			return fail(err)
+		}
+	case "retest":
+		if len(pos) < 3 {
+			return fail(errors.New("usage: kai track <program> retest <id>"))
+		}
+		snapshot := ""
+		if b, err := os.ReadFile(filepath.Join(p.Dir, "diff.json")); err == nil {
+			var d struct {
+				To string `json:"to"`
+			}
+			if json.Unmarshal(b, &d) == nil {
+				snapshot = d.To
+			}
+		}
+		if err := ledger.Retest(pos[2], snapshot); err != nil {
+			return fail(err)
+		}
+	default:
+		return fail(fmt.Errorf("unknown track action %q", action))
+	}
+	if err := ledger.Save(p.Dir); err != nil {
+		return fail(err)
+	}
+	fmt.Print(ledger.Markdown())
+	return 0
 }
 
 func cmdRun(args []string) int {
@@ -1009,6 +1225,7 @@ func cmdPack(args []string) int {
 	if err != nil {
 		return fail(err)
 	}
+	writeCompact(p)
 	res, err := pack.Build(p, pack.Options{
 		OutDir:         *out,
 		IncludeRaw:     *includeRaw,

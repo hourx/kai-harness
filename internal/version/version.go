@@ -7,7 +7,7 @@ import (
 
 // Version is the release tag. Overridden at build time with
 // -ldflags "-X github.com/hourx/kai/internal/version.Version=x.y.z".
-var Version = "0.9.0-dev"
+var Version = "0.10.0-dev"
 
 // String returns the version plus the VCS revision when available.
 func String() string {

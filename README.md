@@ -121,6 +121,10 @@ memverifikasi host di `policy.md`. Untuk HackerOne tidak perlu.
 | `run <url> [--step] [--clone] [--no-session] [--rps N] [-o dist] [--force]` | workflow lengkap |
 | `intake <url> [--dry-run] [--name slug] [--force] [--trust-scope] [--max-links N]` | baca program + referensi |
 | `boundaries <program>` | aturan & kutipan verbatim |
+| `brief <program> [--out file]` | kartu konteks ~300 token (auto saat `pack`) |
+| `track <program> list\|submit\|status\|payout\|retest` | ledger submit → triage → payout |
+| `backup [--out file] [--include-session] [--include-repos]` | salinan state di luar repo |
+| `restore <file.tar.gz> [--dest dir]` | pulihkan state |
 | `rules-diff <program>` | perubahan aturan antar-intake |
 | `scope <program> <host\|cidr>` | gate IN/OUT (exit 0/1/2) |
 | `session <program> [show\|set\|clear] [--har f] [--cookie s] [--header 'K: V']` | sesi untuk recon |
@@ -136,12 +140,38 @@ memverifikasi host di `policy.md`. Untuk HackerOne tidak perlu.
 
 ---
 
+## State, kartu konteks & triage
+
+- **`brief-compact.md`** dibuat otomatis saat `pack`, berisi maksimal ~300 token:
+  platform, verdict, scope, boundary, kanal submit, dan 5 target teratas.
+  Ini untuk Orchestrator agent. Detail tetap ada di `BRIEF.md` dan `next.md`.
+- **`kai backup`** menyalin `data/` + `dist/` ke satu `.tar.gz` di luar repo.
+  Default **tidak** menyertakan `session.json` dan repo hasil clone. Simpan
+  arsip ini di mesin lain — VPS yang mati tidak membawa state bersamanya.
+- **`kai track`** mencatat lifecycle temuan: submit → needs-info → duplicate/
+  informative → resolved → paid. Alasan penolakan otomatis masuk
+  `findings/dupes.md` dan `findings/lessons.md`, lalu ringkasannya tampil di
+  `BRIEF.md`. Ini catatan manual — tool tidak menghubungi platform.
+
+Contoh:
+
+```bash
+kai track anthropic submit 1                       # ambil target #1 dari next.json
+kai track anthropic status f-001 needs-info --note 'butuh akun kedua'
+kai track anthropic status f-001 duplicate --note 'akar sama dengan laporan lama'
+kai track anthropic payout f-001 --amount 250
+kai backup --out ~/bountykit-state.tar.gz
+```
+
+---
+
 ## Artefak
 
 ```
 $KAI_HOME/<program>/
   meta.json  program.md  scope.txt  out-of-scope.txt
   boundaries.md   aturan + kutipan verbatim
+  brief-compact.md  kartu ~300 token untuk agen
   policy.md       policy asli
   intake.json     data Phase 0 + scorecard
   rules-diff.*    perubahan aturan
@@ -150,6 +180,7 @@ $KAI_HOME/<program>/
   diff.json/.md   delta permukaan
   session.json    cookie, mode 0600
   nonweb.json/.md hasil analyze
+  findings/       ledger.json + lessons.md + dupes.md
   map.*  next.*
   state/          subs, live, urls, js, endpoints, ranked
   snapshots/<ts>/
@@ -157,12 +188,13 @@ $KAI_HOME/<program>/
 
 dist/<program>_<ts>.zip
   <program>/
-    BRIEF.md  program.md  boundaries.md  policy.md  LEDGER.md
+    BRIEF.md  program.md  boundaries.md  brief-compact.md  policy.md  LEDGER.md
     scope.txt  out-of-scope.txt
     recon/                    konvensi Kairos
     bountykit/                ← kontrak internal, tetap walau produk bernama kai
       MANIFEST.json  intake.json  rules-diff.md
       diff.md  map.*  next.*  nonweb.*
+      ledger.json  lessons.md  dupes.md
       session.json            hanya dengan --include-session
 ```
 
@@ -254,6 +286,7 @@ Hal-hal yang nyata ditemukan saat membangun dan menguji kai:
 | `403 Just a moment...` | Cloudflare; butuh session dari browser/IP yang sama |
 | `audit FAIL` | jangan diserahkan ke Kairos; baca baris FAIL |
 | `unknown program` | state root salah → cek `KAI_HOME` / `pwd` |
+| VPS mati / ganti VPS | `kai restore backup.tar.gz`, lalu impor session ulang |
 
 ---
 
@@ -278,6 +311,9 @@ Sekarang: `go install github.com/hourx/kai/cmd/kai@latest`.
 | v0.4–v0.6 | intake multi-sumber, boundaries verbatim |
 | v0.7–v0.8 | rule diff, aset non-web, analisis repo/kontrak |
 | v0.9 | identitas `kai`, `run` / `audit` / `doctor` |
+| v0.10 | backup/restore, compact brief, triage ledger |
+
+Fitur selesai. Setelah ini **freeze** — kai adalah penyiap konteks, bukan agen hunting.
 | v1.0 | config file, penguraian repo organisasi, wrapper npm |
 
 Desain lengkap: [`SPEC.md`](SPEC.md).
