@@ -54,6 +54,53 @@ func plain(s string) string {
 	return s
 }
 
+// explicitEmailChannel looks for a sentence that tells the reporter where to
+// send a report. A generic "security@" mention is a contact, not a channel.
+func explicitEmailChannel(policy string, contacts []string) string {
+	allowed := map[string]bool{}
+	for _, c := range contacts {
+		allowed[strings.ToLower(c)] = true
+	}
+	hints := []string{
+		"send your report", "submit your report", "email your report", "report to",
+		"send reports", "submissions to", "submission to", "email us",
+		"contact us at", "reach us at", "please email",
+	}
+	for _, line := range strings.Split(policy, "\n") {
+		low := strings.ToLower(line)
+		hit := false
+		for _, h := range hints {
+			if strings.Contains(low, h) {
+				hit = true
+				break
+			}
+		}
+		if !hit {
+			continue
+		}
+		var found []string
+		for _, e := range emailRE.FindAllString(line, -1) {
+			e = strings.ToLower(e)
+			if !allowed[e] {
+				continue
+			}
+			seen := false
+			for _, x := range found {
+				if x == e {
+					seen = true
+				}
+			}
+			if !seen {
+				found = append(found, e)
+			}
+		}
+		if len(found) == 1 {
+			return found[0]
+		}
+	}
+	return ""
+}
+
 // ExtractBoundaries reads the policy text. It never upgrades a missing rule to
 // "allowed": absence of a phrase means "unknown", not permission.
 func ExtractBoundaries(policy, confidence string) Boundaries {
@@ -101,6 +148,15 @@ func ExtractBoundaries(policy, confidence string) Boundaries {
 	sort.Strings(b.SubmissionContact)
 	if len(b.SubmissionContact) > 0 {
 		b.SubmissionChannel = "email-or-contact"
+	}
+	// "email-or-contact" is honest but useless at Gate 3: the Reporter cannot
+	// tell an email submission channel from a media contact. If the policy
+	// explicitly tells the reporter to send/email a report to one address,
+	// record that exact channel. Never overwrite a platform channel.
+	if !strings.HasPrefix(b.SubmissionChannel, "platform:") {
+		if explicit := explicitEmailChannel(policy, b.SubmissionContact); explicit != "" {
+			b.SubmissionChannel = "email:" + explicit
+		}
 	}
 
 	for _, line := range strings.Split(policy, "\n") {

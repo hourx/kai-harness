@@ -28,6 +28,20 @@ Send a detailed report with a working proof of concept. KYC is required for payo
 No public disclosure before the issue is fixed.
 `
 
+func TestExtractBoundariesEmailChannel(t *testing.T) {
+	policy := `## Submission
+Send your report to security@example.com. Please keep it confidential.
+For press enquiries contact press@example.com.
+`
+	b := ExtractBoundaries(policy, "heuristic")
+	if b.SubmissionChannel != "email:security@example.com" {
+		t.Errorf("SubmissionChannel = %q, want email:security@example.com", b.SubmissionChannel)
+	}
+	if !strings.Contains(strings.Join(b.SubmissionContact, ","), "press@example.com") {
+		t.Errorf("contacts lost the non-submission address: %v", b.SubmissionContact)
+	}
+}
+
 func TestExtractBoundariesFull(t *testing.T) {
 	b := ExtractBoundaries(policyFixture, "structured")
 	if b.MainnetTesting != "forbidden" {

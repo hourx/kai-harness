@@ -25,12 +25,19 @@ func ValidationGate(pDir string) (string, error) {
 		_ = json.Unmarshal(b, &in)
 	}
 	submission := in.Boundaries.SubmissionChannel
-	if submission == "" {
-		submission = "unknown — tidak ditemukan di program page"
-	}
 	contacts := strings.Join(in.Boundaries.SubmissionContact, ", ")
 	if contacts == "" {
 		contacts = "tidak ada kontak publik yang tercatat"
+	}
+	// Older intake.json files only carry "email-or-contact". A single published
+	// address plus that marker is enough to surface a candidate channel — still
+	// flagged for verification, never presented as fact.
+	if submission == "" || strings.HasPrefix(submission, "email-or-contact") || strings.EqualFold(submission, "unknown") {
+		if len(in.Boundaries.SubmissionContact) == 1 {
+			submission = "email:" + in.Boundaries.SubmissionContact[0] + " (dari kontak policy — verifikasi)"
+		} else if submission == "" {
+			submission = "unknown — tidak ditemukan di program page"
+		}
 	}
 
 	queue := 0
