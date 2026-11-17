@@ -73,7 +73,7 @@ type Options struct {
 
 var (
 	slugRE     = regexp.MustCompile(`github\.com[:/]([A-Za-z0-9_.-]+)/([A-Za-z0-9_.-]+?)(?:\.git)?(?:[/#?].*)?$`)
-	orgRE      = regexp.MustCompile(`(?i)^https?://github\.com/([A-Za-z0-9_.-]+)/?$`)
+	orgRE      = regexp.MustCompile(`(?i)^(?:https?://)?(?:www\.)?github\.com/([A-Za-z0-9_.-]+)/?$`)
 	addressRE  = regexp.MustCompile(`0x[0-9a-fA-F]{40}`)
 	explorerRE = regexp.MustCompile(`https://([a-z0-9.-]*scan[a-z0-9.-]*)/address/`)
 )

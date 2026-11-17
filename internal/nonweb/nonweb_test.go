@@ -53,7 +53,7 @@ func TestAnalyzeExpandsOrgURL(t *testing.T) {
 	}
 	intake := `{"platform":"h1","confidence":"structured","name":"Demo","url":"https://hackerone.com/demo",
 	  "fetched_at":"2026-11-17T00:00:00Z","assets":[
-	    {"identifier":"https://github.com/anthropics","type":"SOURCE_CODE","eligible_for_submission":true}
+	    {"identifier":"github.com/anthropics","type":"SOURCE_CODE","eligible_for_submission":true}
 	  ]}`
 	if err := os.WriteFile(filepath.Join(p.Dir, "intake.json"), []byte(intake), 0o600); err != nil {
 		t.Fatal(err)
