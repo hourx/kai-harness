@@ -10,12 +10,25 @@ import (
 )
 
 // Hypothesis is one ranked thing to test, with the evidence that put it there.
+// Tags let a subagent retrieve by concern instead of loading all 150 items.
+// Cluster groups endpoints with the same object root so the same surface is
+// not tested twice under different variable names.
 type Hypothesis struct {
-	Target string   `json:"target"`
-	Class  string   `json:"class"`
-	Score  int      `json:"score"`
-	Why    []string `json:"why"`
-	Probe  string   `json:"probe"`
+	Target   string   `json:"target"`
+	Class    string   `json:"class"`
+	Score    int      `json:"score"`
+	Why      []string `json:"why"`
+	Probe    string   `json:"probe"`
+	Tags     []string `json:"tags,omitempty"`
+	Cluster  string   `json:"cluster,omitempty"`
+	Variants []string `json:"variants,omitempty"`
+}
+
+// Cluster is one object root shared by several hypotheses.
+type Cluster struct {
+	Key     string   `json:"key"`
+	Targets []string `json:"targets"`
+	Count   int      `json:"count"`
 }
 
 // Plan is the ordered test queue for a program.
@@ -23,6 +36,7 @@ type Plan struct {
 	Program   string       `json:"program"`
 	Generated string       `json:"generated"`
 	Items     []Hypothesis `json:"items"`
+	Clusters  []Cluster    `json:"clusters,omitempty"`
 }
 
 var probes = map[string]string{
@@ -73,6 +87,12 @@ func BuildPlan(program string, m *Map, endpoints map[string][]string, d *recon.D
 			return
 		}
 		seen[h.Target+"|"+h.Class] = true
+		if len(h.Tags) == 0 {
+			h.Tags = tagsFor(h.Class, h.Target)
+		}
+		if h.Cluster == "" {
+			h.Cluster = clusterKey(h.Target)
+		}
 		p.Items = append(p.Items, h)
 	}
 
@@ -188,7 +208,102 @@ func BuildPlan(program string, m *Map, endpoints map[string][]string, d *recon.D
 	if len(p.Items) > 150 {
 		p.Items = p.Items[:150]
 	}
+
+	// Cluster endpoints that share an object root. This is a derived view:
+	// `items` keeps its old shape and order, so existing consumers do not
+	// change; agents may read clusters first and avoid re-testing variants.
+	groups := map[string][]string{}
+	for _, it := range p.Items {
+		if it.Cluster != "" {
+			groups[it.Cluster] = append(groups[it.Cluster], it.Target)
+		}
+	}
+	keys := make([]string, 0, len(groups))
+	for k := range groups {
+		if len(groups[k]) > 1 {
+			keys = append(keys, k)
+		}
+	}
+	sort.Strings(keys)
+	for _, k := range keys {
+		p.Clusters = append(p.Clusters, Cluster{Key: k, Targets: groups[k], Count: len(groups[k])})
+		for i := range p.Items {
+			if p.Items[i].Cluster != k {
+				continue
+			}
+			for _, other := range groups[k] {
+				if other != p.Items[i].Target {
+					p.Items[i].Variants = append(p.Items[i].Variants, other)
+				}
+			}
+		}
+	}
 	return p
+}
+
+// tagsFor is a small retrieval index: api/auth-required/idor/priority-high.
+// It is computed from fields kai already knows — no guess about impact.
+func tagsFor(class, target string) []string {
+	low := strings.ToLower(target)
+	out := []string{}
+	if strings.Contains(low, "/api/") || strings.Contains(low, "api.") {
+		out = append(out, "api")
+	}
+	switch class {
+	case "IDOR/BOLA", "access-control":
+		out = append(out, "idor")
+	case "auth-bypass/ATO", "privilege-escalation":
+		out = append(out, "auth", "auth-required")
+	case "business-logic":
+		out = append(out, "logic")
+	case "file-upload/SSRF", "supply-chain", "smart-contract":
+		out = append(out, "infra")
+	}
+	if strings.Contains(low, "token") || strings.Contains(low, "oauth") ||
+		strings.Contains(low, "session") || strings.Contains(low, "login") {
+		out = append(out, "auth-required")
+	}
+	return uniqTags(out)
+}
+
+func uniqTags(in []string) []string {
+	seen := map[string]bool{}
+	out := []string{}
+	for _, s := range in {
+		if s != "" && !seen[s] {
+			seen[s] = true
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
+// clusterKey normalises an endpoint into its object root so ten endpoints
+// under /api/organizations/{id}/... become one cluster, not ten hypotheses.
+func clusterKey(target string) string {
+	path := strings.TrimSpace(target)
+	if i := strings.IndexAny(path, " \t"); i > 0 {
+		path = strings.TrimSpace(path[i:])
+	}
+	if i := strings.Index(path, "?"); i >= 0 {
+		path = path[:i]
+	}
+	if !strings.HasPrefix(path, "/") {
+		return ""
+	}
+	parts := strings.Split(strings.Trim(path, "/"), "/")
+	if len(parts) > 4 {
+		parts = parts[:4]
+	}
+	for i, p := range parts {
+		if p == "" {
+			continue
+		}
+		if numRE.MatchString(p) || uuidRE.MatchString(p) || hexRE.MatchString(p) || idNames[strings.ToLower(p)] {
+			parts[i] = "{id}"
+		}
+	}
+	return "/" + strings.Join(parts, "/")
 }
 
 // hostWordMatches returns the risky words present in the subdomain part of a

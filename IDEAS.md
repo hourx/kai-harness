@@ -1,8 +1,15 @@
 # Ide yang ditunda (deferred)
 
-Catatan ini bukan roadmap kai. Kai **difreeze** di v0.10.x sebagai context
-packer. Ide di bawah dipakai **saat fase skill Hermes**, bukan ditambahkan ke
-binari kai.
+Catatan ini bukan roadmap kai. Kai **difreeze** sebagai context packer: tidak
+ada hunting, validasi, report, atau submit di binari. Ide di bawah **boleh**
+diterapkan selama masih berupa *artefak konteks* yang deterministik.
+
+## Status
+
+- [x] 1. `validation-gate.md` otomatis — dipakai `kai export`.
+- [x] 2. Cluster hipotesis — `clusters` + `variants` di `next.json`.
+- [x] 3. `tags` di `next.json` — `api`, `auth`, `idor`, `logic`, dll.
+- [x] `kai export <program> --to <dir>` — jembatan ke folder campaign Kairos.
 
 ## 1. `validation-gate.md` otomatis
 

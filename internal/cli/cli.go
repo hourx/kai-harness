@@ -64,6 +64,8 @@ Commands:
   diff    <program>                                          show last surface diff
   pack    <program> [-o dist] [--include-raw] [--include-session]
                                                              build handoff ZIP
+  export  <program> --to <dir>                               write agent context files
+                                                             into a Kairos campaign dir
   status  [<program>]                                        show state
   version                                                    print version
 
@@ -125,6 +127,8 @@ func Run(args []string) int {
 		return cmdDiff(args[1:])
 	case "pack":
 		return cmdPack(args[1:])
+	case "export":
+		return cmdExport(args[1:])
 	case "status":
 		return cmdStatus(args[1:])
 	default:
