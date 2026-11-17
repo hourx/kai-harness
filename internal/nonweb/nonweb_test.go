@@ -82,11 +82,11 @@ func TestScanRepoDeduplicatesRisks(t *testing.T) {
 
 func TestRiskScoreAndTopRisk(t *testing.T) {
 	risks := []string{"untrusted github.event data interpolated", "secrets referenced from a PR-triggered workflow", "PR-triggered workflow runs with the base repository token"}
-	if got := RiskScore(risks); got != 60 {
-		t.Errorf("RiskScore = %d, want 60 before cap", got)
+	if got := RiskScore(risks); got != 45 {
+		t.Errorf("RiskScore = %d, want capped 45", got)
 	}
-	if got := RiskScore(risks); got > 45 {
-		t.Errorf("RiskScore not capped: %d", got)
+	if got := RiskScore([]string{"secrets referenced from a PR-triggered workflow", "untrusted github.event data"}); got != 30 {
+		t.Errorf("RiskScore = %d, want 30", got)
 	}
 	top := TopRisk(risks)
 	if !strings.Contains(top, "base repository token") {
