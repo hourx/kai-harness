@@ -253,7 +253,7 @@ dist/<program>_<ts>.zip
     BRIEF.md  program.md  scope.txt  out-of-scope.txt
     boundaries.md  policy.md  LEDGER.md
     recon/                   sesuai konvensi Kairos
-    kai/
+    bountykit/               ← nama internal tetap, kontrak dengan Kairos
       MANIFEST.json  intake.json  rules-diff.md
       diff.md  map.json/.md  next.json/.md  nonweb.json/.md
       session.json           hanya dengan --include-session

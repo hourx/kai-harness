@@ -267,7 +267,7 @@ Batas bawah: item `surface-review` dengan skor < 30 dibuang. Kalau tidak ada yan
     │   ├── js.ts
     │   ├── endpoints.txt
     │   └── nuclei.txt
-    └── kai/
+    └── bountykit/           ← kontrak internal, bukan nama produk
         ├── MANIFEST.json      ← daftar file + sha256
         ├── intake.json        ← Phase 0 (skor + alasan)
         ├── rules-diff.md      ← perubahan aturan
