@@ -421,6 +421,48 @@ func scanRepo(r *Repo, logf func(format string, args ...any)) {
 	logf("  scanned %s: %d workflow(s), %d manifest(s)", r.Slug, len(r.Workflows), len(r.Manifests))
 }
 
+// RiskScore converts CI findings into a bounded ranking boost (0–45).
+// Routine "untrusted event" matches are common; PR-token and secret exposure
+// are much stronger signals and should surface above generic IDOR candidates.
+func RiskScore(risks []string) int {
+	score := 0
+	for _, r := range risks {
+		low := strings.ToLower(r)
+		switch {
+		case strings.Contains(low, "base repository token"):
+			score += 30
+		case strings.Contains(low, "secrets referenced"):
+			score += 25
+		case strings.Contains(low, "remote script"):
+			score += 15
+		case strings.Contains(low, "install-time"):
+			score += 10
+		case strings.Contains(low, "untrusted"):
+			score += 5
+		}
+	}
+	if score > 45 {
+		return 45
+	}
+	return score
+}
+
+// TopRisk returns the most severe finding for the probe hint.
+func TopRisk(risks []string) string {
+	order := []string{"base repository token", "secrets referenced", "remote script", "install-time", "untrusted"}
+	for _, want := range order {
+		for _, r := range risks {
+			if strings.Contains(strings.ToLower(r), want) {
+				return r
+			}
+		}
+	}
+	if len(risks) > 0 {
+		return risks[0]
+	}
+	return ""
+}
+
 func uniqueStrings(in []string) []string {
 	seen := map[string]bool{}
 	out := make([]string, 0, len(in))

@@ -80,6 +80,26 @@ func TestScanRepoDeduplicatesRisks(t *testing.T) {
 	}
 }
 
+func TestRiskScoreAndTopRisk(t *testing.T) {
+	risks := []string{"untrusted github.event data interpolated", "secrets referenced from a PR-triggered workflow", "PR-triggered workflow runs with the base repository token"}
+	if got := RiskScore(risks); got != 60 {
+		t.Errorf("RiskScore = %d, want 60 before cap", got)
+	}
+	if got := RiskScore(risks); got > 45 {
+		t.Errorf("RiskScore not capped: %d", got)
+	}
+	top := TopRisk(risks)
+	if !strings.Contains(top, "base repository token") {
+		t.Errorf("TopRisk = %q", top)
+	}
+	if RiskScore([]string{"untrusted github.event data"}) != 5 {
+		t.Error("routine untrusted-event match should get a small boost")
+	}
+	if RiskScore(nil) != 0 || TopRisk(nil) != "" {
+		t.Error("empty risks should produce zero boost and empty hint")
+	}
+}
+
 func TestAnalyzeExpandsOrgURL(t *testing.T) {
 	t.Setenv("BOUNTYKIT_HOME", t.TempDir())
 	p, err := workspace.Create("demo", workspace.Meta{})

@@ -790,8 +790,8 @@ func enrichNonWeb(p *workspace.Program, out []surface.NonWebAsset) {
 		if r, ok := repos[strings.TrimSuffix(a.Identifier, "/")]; ok {
 			if len(r.Risks) > 0 {
 				a.Detail += " | CI risks: " + strings.Join(r.Risks[:min(3, len(r.Risks))], "; ")
-				a.Boost += 15
-				a.Hint = "Review the flagged CI workflow first (" + r.Risks[0] + ")."
+				a.Boost += nonweb.RiskScore(r.Risks)
+				a.Hint = "Review the flagged CI workflow first (" + nonweb.TopRisk(r.Risks) + ")."
 			} else if r.Status == "local" {
 				a.Detail += " | repo scanned locally, no flagged CI pattern"
 			}
