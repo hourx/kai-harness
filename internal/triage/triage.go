@@ -124,10 +124,13 @@ func (l *Ledger) SetStatus(id, status, note string) error {
 	return nil
 }
 
-func (l *Ledger) Payout(id string, amount int) error {
+func (l *Ledger) Payout(id string, amount int, force bool) error {
 	f := l.find(id)
 	if f == nil {
 		return fmt.Errorf("no finding %s", id)
+	}
+	if !force && (f.Status == "duplicate" || f.Status == "informative") {
+		return fmt.Errorf("%s is %s — pass --force if the program still paid it", id, f.Status)
 	}
 	f.Status = "paid"
 	f.Amount = amount

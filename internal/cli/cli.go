@@ -272,6 +272,7 @@ func cmdTrack(args []string) int {
 	platformFlag := fs.String("platform", "", "platform used for submission")
 	noteFlag := fs.String("note", "", "triager note / reason")
 	amountFlag := fs.Int("amount", 0, "payout amount")
+	forceFlag := fs.Bool("force", false, "allow payout on a finding marked duplicate/informative")
 	if err := fs.Parse(rest); err != nil {
 		return 2
 	}
@@ -337,9 +338,9 @@ func cmdTrack(args []string) int {
 		}
 	case "payout":
 		if len(pos) < 3 || *amountFlag <= 0 {
-			return fail(errors.New("usage: kai track <program> payout <id> --amount N"))
+			return fail(errors.New("usage: kai track <program> payout <id> --amount N [--force]"))
 		}
-		if err := ledger.Payout(pos[2], *amountFlag); err != nil {
+		if err := ledger.Payout(pos[2], *amountFlag, *forceFlag); err != nil {
 			return fail(err)
 		}
 	case "retest":

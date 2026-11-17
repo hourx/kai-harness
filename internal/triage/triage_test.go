@@ -29,8 +29,11 @@ func TestLedgerLifecycle(t *testing.T) {
 	if len(l.Dupes) != 1 || len(l.Lessons) != 1 {
 		t.Fatalf("dupes=%v lessons=%v", l.Dupes, l.Lessons)
 	}
-	if err := l.Payout(f.ID, 250); err != nil {
-		t.Fatal(err)
+	if err := l.Payout(f.ID, 250, false); err == nil {
+		t.Error("payout of a duplicate should be refused without --force")
+	}
+	if err := l.Payout(f.ID, 250, true); err != nil {
+		t.Fatalf("forced payout failed: %v", err)
 	}
 	if err := l.Save(dir); err != nil {
 		t.Fatal(err)

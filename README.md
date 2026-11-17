@@ -122,7 +122,7 @@ memverifikasi host di `policy.md`. Untuk HackerOne tidak perlu.
 | `intake <url> [--dry-run] [--name slug] [--force] [--trust-scope] [--max-links N]` | baca program + referensi |
 | `boundaries <program>` | aturan & kutipan verbatim |
 | `brief <program> [--out file]` | kartu konteks ~300 token (auto saat `pack`) |
-| `track <program> list\|submit\|status\|payout\|retest` | ledger submit → triage → payout |
+| `track <program> list\|submit\|status\|payout\|retest` | ledger submit → triage → payout (`payout` butuh `--force` jika duplicate) |
 | `backup [--out file] [--include-session] [--include-repos]` | salinan state di luar repo |
 | `restore <file.tar.gz> [--dest dir]` | pulihkan state |
 | `rules-diff <program>` | perubahan aturan antar-intake |
