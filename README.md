@@ -1,183 +1,116 @@
 # kai
 
-Pembantu Phase 0–3 bug bounty: membaca aturan program, memetakan permukaan,
-lalu menghasilkan satu ZIP yang langsung bisa dipakai Kairos (`bugbounty-pipeline`).
+> **Tahu batasnya, siapkan konteksnya.**
 
-Bukan tool recon baru. Nilainya ada di **state lintas-run** (`first_seen` /
-`last_seen` + diff), **batasan yang terdokumentasi**, dan **brief kecil** yang
-dibaca agent sebelum mulai hunting.
+`kai` adalah context packer deterministik untuk bug bounty. Ia mengerjakan
+Fase 0–3 (pemahaman program → recon → pemetaan → antrian tes), lalu
+menghasilkan **satu ZIP kecil** yang langsung bisa dipakai agen **Kairos**.
 
-Desain: [`SPEC.md`](SPEC.md).
-
----
-
-## Mulai dari sini (satu perintah)
-
-```bash
-kai doctor                  # cek lingkungan sekali jalan
-kai run 'https://hackerone.com/anthropic'
-kai run 'https://hackerone.com/anthropic' --step    # mode belajar: berhenti tiap fase
-```
-
-`kai run` melakukan urutan di bawah otomatis: intake → boundaries → session check →
-recon → analyze → next → pack → audit. Kalau tidak ada scope host (program web3),
-recon dilewati dan jalur non-web yang dipakai.
-
-Di bawah ini urutan **manual** — berguna kalau mau mengawasi tiap tahap atau
-sedang mempelajari alurnya.
-
-Contoh memakai program HackerOne. Ganti `temu` dengan programmu.
-
-### 0. Cek dulu layak tidaknya (tanpa bikin apa-apa)
-
-```bash
-kai intake 'https://hackerone.com/temu?type=team' --dry-run
-```
-
-Keluar scorecard: reward, jumlah report 90 hari, efficiency, dan scope yang
-publish. Verdict `go` / `careful` / `skip` / `vdp-only` / `review`.
-
-### 1. Buat workspace
-
-```bash
-kai intake 'https://hackerone.com/temu?type=team'
-```
-
-Terbuat `data/temu/` berisi `scope.txt`, `out-of-scope.txt`, `policy.md`,
-`boundaries.md`, `program.md`, `intake.json`.
-
-Secara default `intake` juga **mengikuti link dokumentasi yang relevan** dari
-halaman utama (maksimal 8 halaman, domain yang sama saja): guide testnet,
-halaman reward, cara submit, dan sejenisnya. Semua teksnya digabung sebelum
-aturan diekstrak, jadi email submission, host testnet, dan aturan tambahan
-masuk dalam satu kali jalan. Daftar halaman yang dibaca ada di `intake.json`
-dan di scorecard. Matikan dengan `--no-follow`, atau ubah batasnya dengan
-`--max-links 12`.
-
-### 2. Baca batasan sebelum apa pun
-
-```bash
-kai boundaries temu
-```
-
-Ini **kontrak program**: aturan mainnet/testnet, PoC, KYC, header wajib, dan
-kutipan verbatim bagian in-scope / out-of-scope / prohibited / disclosure.
-Yang tidak dipublikasikan ditulis `unknown` / "not stated" — bukan izin.
-
-### 3. Periksa scope, lalu gate tiap host
-
-```bash
-cat data/temu/scope.txt data/temu/out-of-scope.txt
-kai scope temu www.temu.com     # exit 0=IN, 1=OUT, 2=error
-kai scope temu evil.temu.com.evil.test
-```
-
-`out-of-scope.txt` selalu menang. Empty `scope.txt` membuat recon menolak jalan.
-
-### 4. (Opsional) Impor session kalau mau petakan area login
-
-```bash
-kai session temu set --har ~/Downloads/burp.har
-kai session temu show                      # nilai disembunyikan
-kai recon temu                             # otomatis pakai session
-kai session temu clear
-```
-
-Tanpa session, yang dipetakan hanya permukaan unauth. `--no-session` untuk
-memaksa recon tanpa session.
-
-### 5A. Jalur web — recon
-
-```bash
-kai recon temu                 # crt.sh + Cert Spotter (+adapter kalau ada)
-kai recon temu --step          # mode belajar: berhenti tiap fase
-kai diff temu                  # apa yang baru sejak run terakhir
-```
-
-Host eksak dari `scope.txt` diprobes langsung. Wildcard baru di-enumerasi
-subdomainnya. Semua host lolos gate dulu sebelum ada request keluar.
-
-### 5B. Jalur non-web — repo & kontrak
-
-Untuk program seperti Uniswap (Cantina), Beanstalk (Immunefi), Hyperliquid,
-Ethereum, atau Muse:
-
-```bash
-kai analyze uniswap             # tanpa clone: lihat daftar aset dulu
-kai analyze uniswap --clone     # clone repo in-scope ke data/<program>/repos/
-kai analyze uniswap --refresh   # git pull repo yang sudah ada
-```
-
-`analyze` membaca workflow CI (mis. `pull_request_target`, `${{ github.event.* }}`,
-`write-all`), install-time scripts, manifest, entry point kontrak, dan alamat
-kontrak beserta explorer-nya. Hasilnya `nonweb.md` / `nonweb.json`.
-
-### 6. Bangun peta dan antrian tes
-
-```bash
-kai map temu                   # modul, object ref, parameter, aset non-web
-kai next temu                  # antrian terurut + alasan + probe pertama
-```
-
-`recon` dan `analyze` otomatis menyegarkan keduanya. `next` memasukkan aset
-non-web, dan probe-nya mewarisi batasan — program yang melarang mainnet akan
-bilang "use testnet or a local fork only" di probe pertamanya.
-
-### 7. Cek perubahan aturan
-
-```bash
-kai rules-diff temu
-```
-
-Tiap intake di-snapshot ke `intakes/<ts>/`. Kalau program mencabut host dari
-scope, mengubah reward, atau mengedit policy, ini muncul di sini dan di
-`BRIEF.md`.
-
-### 8. Pack untuk Kairos
-
-```bash
-kai pack temu -o dist
-kai pack temu -o dist --include-session   # HANYA kalau agent perlu auth
-```
-
-Lalu di mesin Kairos:
-
-```bash
-unzip dist/temu_*.zip -d workspace/
-```
-
-ZIP berisi `BRIEF.md` yang dibuka dengan Phase 0 → Boundaries → perubahan
-aturan → scope → Start here (ranked) → diff permukaan.
+Bukan tool recon baru. Nilainya ada pada **state lintas-run**, **batasan yang
+terdokumentasi**, dan **brief yang sudah disaring**.
 
 ---
 
-## Contoh singkat: sumber non-HackerOne
+## Kenapa perlu kai
+
+Masalah yang dijawab:
+
+| Masalah | Jawaban kai |
+|---|---|
+| Agent mengulang permukaan yang sama → duplikat | `first_seen` / `last_seen` + `diff`: yang baru saja yang diprioritaskan |
+| Aturan program tersebar di banyak halaman | `boundaries.md`: scope + out-of-scope + prohibited + submission, verbatim |
+| Policy panjang, RTK Kairos memotong output >500 char | `BRIEF.md`, satu halaman, urut: Phase 0 → Boundaries → Scope → Start here |
+| Hasil tiap run berbeda-beda | Ekstraksi deterministik + confidence + snapshot |
+
+---
+
+## Peta fase
+
+| Fase | Perintah | Keluaran |
+|---|---|---|
+| 0 — Program | `kai intake <url>` | `intake.json`, `program.md`, `boundaries.md`, `policy.md` |
+| 1 — Batasan | `kai boundaries <program>` | aturan main, email/kanal submit, header wajib |
+| 2 — Permukaan | `kai recon <program>` / `kai analyze <program>` | `assets.json`, `state/`, `nonweb.*` |
+| 3 — Antrian | `kai next <program>` | `map.json`, `next.json` + alasan & probe |
+| Serah | `kai pack <program>` | `dist/<program>_<ts>.zip` |
+| QA | `kai audit <program>` | 30 pengecekan konsistensi |
+
+`kai run <url>` menjalankan semuanya sekaligus.
+
+---
+
+## Setup awal
+
+### Opsi 1 — Go terpasang
 
 ```bash
-# 1. baca (verdict selalu "review" untuk sumber teks)
-kai intake cantina.xyz/bounties/f9df94db-c7b1-434b-bb06-d1360abdd1be --dry-run
-
-# 2. buat workspace
-kai intake cantina.xyz/bounties/f9df94db-c7b1-434b-bb06-d1360abdd1be \
-  --name uniswap
-
-# 3. baca batasan
-kai boundaries uniswap
-
-# 4. host dari teks prose MASIH kandidat, belum aktif.
-#    Verifikasi di policy.md, lalu aktifkan kalau setuju:
-kai intake cantina.xyz/bounties/f9df94db-c7b1-434b-bb06-d1360abdd1be \
-  --name uniswap --force --trust-scope
-
-# 5. lanjut seperti biasa
-kai analyze uniswap --clone
-kai next uniswap
-kai pack uniswap -o dist
+go install github.com/hourx/kai/cmd/kai@latest
+kai version
 ```
 
-Sumber yang didukung: HackerOne (GraphQL terstruktur), Cantina, Immunefi,
-GitBook (varian `.md`), `bugbounty.meta.com`, `ethereum.org`, dan halaman
-mandiri lain.
+### Opsi 2 — dari source
+
+```bash
+git clone https://github.com/hourx/kai.git
+cd kai
+go build -o bin/kai ./cmd/kai
+go test ./...
+install -m 0755 bin/kai /usr/local/bin/kai
+```
+
+### State root
+
+Secara default kai memakai `./data` **relatif terhadap direktori saat ini**.
+Itu sering bikin bingung kalau kamu pindah folder. Lebih baik eksplisit:
+
+```bash
+mkdir -p ~/.kai
+echo 'export KAI_HOME="$HOME/.kai/data"' >> ~/.bashrc   # atau ~/.zshrc
+source ~/.bashrc
+```
+
+`BOUNTYKIT_HOME` masih diterima sebagai alias lama.
+
+### Cek lingkungan
+
+```bash
+kai doctor
+```
+
+Menampilkan: git, Go, adapter recon (`subfinder`, `gau`, `nuclei`, …), proxy,
+state root, semua program + status session, dan konektivitas.
+
+---
+
+## Pemakaian sehari-hari
+
+```bash
+kai doctor                                      # sekali saat setup
+kai run 'https://hackerone.com/anthropic'       # alur lengkap, satu perintah
+kai run 'https://hackerone.com/anthropic' --step  # berhenti tiap fase
+kai audit anthropic                             # cek ZIP sebelum diserahkan
+```
+
+`kai run` melakukan: intake → boundaries → session check → recon → analyze →
+next → pack → audit. Kalau program tidak punya scope host (web3 / on-chain),
+`recon` otomatis dilewati dan jalur non-web yang dipakai.
+
+### Contoh sumber
+
+```bash
+# HackerOne
+kai run 'https://hackerone.com/temu?type=team'
+
+# GitBook di domain sendiri (varian .md terbaca otomatis)
+kai run 'https://docs.ticko.xyz/resources/ticko-bug-bounty' --trust-scope
+
+# Platform lain
+kai run 'https://immunefi.com/bug-bounty/beanstalk/information/'
+kai run 'https://bugbounty.meta.com/payout-guidelines/muse'
+```
+
+`--trust-scope` hanya untuk sumber teks (heuristic), dan **hanya setelah** kamu
+memverifikasi host di `policy.md`. Untuk HackerOne tidak perlu.
 
 ---
 
@@ -185,134 +118,163 @@ mandiri lain.
 
 | Perintah | Fungsi |
 |---|---|
-| `run <url> [--step] [--clone] [--no-session] [--rps N] [-o dist]` | workflow lengkap satu perintah |
-| `audit <program\|file.zip> [-dir dist]` | cek konsistensi ZIP / handoff |
-| `doctor [--no-net]` | cek git, Go, adapter, proxy, session, konektivitas |
-| `init <program> [--platform P] [--url U] [--domain d,d]` | workspace kosong manual |
-| `intake <url\|handle> [--name slug] [--dry-run] [--force] [--trust-scope] [--max-links N] [--no-follow]` | Phase 0 dari halaman program + referensinya |
-| `boundaries <program>` | aturan, batasan, kutipan verbatim |
-| `rules-diff <program>` | perubahan aturan vs intake sebelumnya |
+| `run <url> [--step] [--clone] [--no-session] [--rps N] [-o dist] [--force]` | workflow lengkap |
+| `intake <url> [--dry-run] [--name slug] [--force] [--trust-scope] [--max-links N]` | baca program + referensi |
+| `boundaries <program>` | aturan & kutipan verbatim |
+| `rules-diff <program>` | perubahan aturan antar-intake |
 | `scope <program> <host\|cidr>` | gate IN/OUT (exit 0/1/2) |
-| `session <program> [show\|set\|clear] [--har f] [--cookie s] [--header 'K: V']` | session untuk recon |
-| `recon <program> [--domain d] [--rps N] [--nuclei] [--step] [--no-session]` | discover → probe → harvest → diff |
+| `session <program> [show\|set\|clear] [--har f] [--cookie s] [--header 'K: V']` | sesi untuk recon |
+| `recon <program> [--rps N] [--nuclei] [--step] [--no-session]` | discover → probe → harvest → diff |
 | `diff <program>` | permukaan baru sejak run terakhir |
 | `analyze <program> [--clone] [--refresh]` | repo & kontrak in-scope |
-| `map <program>` | peta endpoint + aset non-web |
-| `next <program>` | antrian tes terurut |
+| `map <program>` / `next <program>` | peta & antrian tes |
 | `pack <program> [-o dist] [--include-raw] [--include-session]` | ZIP handoff |
-| `status [<program>]` | ringkasan semua program |
+| `audit <program\|file.zip> [-dir dist]` | cek konsistensi (30 pengecekan) |
+| `doctor [--no-net]` | cek lingkungan |
+| `status [<program>]` | ringkasan program |
 | `version` | versi + commit |
-
----
-
-## Aturan keras
-
-1. `scope.txt` kosong → recon menolak. Tidak ada pengecualian.
-2. `out-of-scope.txt` selalu menang.
-3. Host dari teks prose tetap kandidat sampai diverifikasi + `--trust-scope`.
-4. Aset berskope path tidak pernah dilebarkan jadi aturan host.
-5. Aturan yang tidak dipublikasikan = `unknown`, bukan izin.
-6. Sumber heuristic selalu verdict `review`, tidak pernah `go`.
-7. Session tidak pernah masuk ZIP kecuali `--include-session` (dan tool memperingatkan). Cookie/header session hanya dikirim ke host in-scope, bukan ke crt.sh/CDN.
-8. `intake` hanya baca halaman publik. Tidak login, tidak menyentuh aset target.
-9. `data/`, `dist/`, `*.zip` tidak pernah masuk git.
-
-Semantik gate identik dengan `Kairos/scripts/scope_check.py`:
-
-| Rule | Arti |
-|---|---|
-| `api.example.com` | exact host |
-| `*.example.com` | subdomain saja, apex tidak ikut |
-| `203.0.113.0/24` | CIDR |
-| out-of-scope | selalu menang |
 
 ---
 
 ## Artefak
 
 ```
-data/<program>/
+$KAI_HOME/<program>/
   meta.json  program.md  scope.txt  out-of-scope.txt
-  boundaries.md            aturan + batasan + kutipan verbatim
-  policy.md                policy asli
-  intake.json              data Phase 0 + scorecard + boundaries
-  rules-diff.json/.md      perubahan aturan
-  intakes/<ts>/            snapshot intake
-  assets.json              host, endpoint, hash JS + first_seen/last_seen
-  diff.json/.md            delta permukaan
-  session.json             cookie (0600, tidak ikut pack by default)
-  nonweb.json/.md          hasil analyze
-  map.json/.md  next.json/.md
-  state/                   subs, live, urls, js, endpoints, ranked
-  snapshots/<ts>/          riwayat aset
-  repos/                   clone repo (hanya dengan --clone)
-  audit.log
+  boundaries.md   aturan + kutipan verbatim
+  policy.md       policy asli
+  intake.json     data Phase 0 + scorecard
+  rules-diff.*    perubahan aturan
+  intakes/<ts>/   snapshot intake
+  assets.json     host + endpoint + hash JS
+  diff.json/.md   delta permukaan
+  session.json    cookie, mode 0600
+  nonweb.json/.md hasil analyze
+  map.*  next.*
+  state/          subs, live, urls, js, endpoints, ranked
+  snapshots/<ts>/
+  repos/          clone (hanya dengan --clone)
 
 dist/<program>_<ts>.zip
   <program>/
-    BRIEF.md  program.md  scope.txt  out-of-scope.txt
-    boundaries.md  policy.md  LEDGER.md
-    recon/                   sesuai konvensi Kairos
-    bountykit/               ← nama internal tetap, kontrak dengan Kairos
+    BRIEF.md  program.md  boundaries.md  policy.md  LEDGER.md
+    scope.txt  out-of-scope.txt
+    recon/                    konvensi Kairos
+    bountykit/                ← kontrak internal, tetap walau produk bernama kai
       MANIFEST.json  intake.json  rules-diff.md
-      diff.md  map.json/.md  next.json/.md  nonweb.json/.md
-      session.json           hanya dengan --include-session
+      diff.md  map.*  next.*  nonweb.*
+      session.json            hanya dengan --include-session
 ```
 
-`KAI_HOME` mengganti root `./data`.
-
-Pipeline memakai folder `targets-<name>/`; pack ini memakai `recon/`
-(konvensi `docs/BUG-BOUNTY.md`). Pemetaan namanya ditulis di `BRIEF.md`.
+> `bountykit/` di dalam ZIP **bukan** nama produk. Itu kontrak dengan
+> `bugbounty-pipeline` di Kairos. Jangan diganti.
 
 ---
 
-## Masalah umum
+## Aturan keras
+
+1. `scope.txt` kosong → recon menolak.
+2. `out-of-scope.txt` selalu menang.
+3. URL dengan path (`/api/*`) tidak dilebarkan jadi aturan host.
+4. Host dari teks prose tetap kandidat sampai diverifikasi + `--trust-scope`.
+5. Yang tidak dipublikasikan = `unknown`, bukan izin.
+6. Sumber heuristic selalu verdict `review`, tidak pernah `go`.
+7. Session tidak pernah masuk ZIP kecuali `--include-session` (dan tool memperingatkan).
+8. Cookie/header session hanya dikirim ke host in-scope — bukan CT service/CDN.
+9. `intake` hanya baca halaman publik. Tidak login, tidak menyerang target.
+10. `data/`, `dist/`, `*.zip` gitignored — tidak ada data target di repo.
+
+---
+
+## Pengetahuan lapangan
+
+Hal-hal yang nyata ditemukan saat membangun dan menguji kai:
+
+### Batasan & aturan
+
+- **Scope bisa berbasis dampak, bukan host.** Program seperti Ticko/Hyperliquid
+  tidak punya daftar host; `recon` akan menolak, dan itu benar. Pakai `analyze`.
+- **Wildcard ≠ apex.** `*.example.com` tidak mencakup `example.com`.
+- **Path-scoped itu jebakan.** `example.com/api/*` kalau dilebarkan jadi
+  `example.com` berarti mengizinkan pengujian di luar izin program.
+- **Email di policy bukan kanal submit.** Untuk HackerOne, laporan tetap lewat
+  form H1; email di policy hanya kontak. kai mencatat keduanya terpisah.
+- **Out-of-scope butuh kata kunci, bukan heading.** Banyak policy menaruh
+  aturan di bullet tanpa judul khusus; kai mengambil baris per kata kunci.
+
+### Recon & permukaan
+
+- **Program padat = diff lebih penting dari jumlah endpoint.** Anthropic:
+  5.282 laporan/90 hari. Mengulang jalur lama hampir pasti duplikat.
+- **Session adalah pembeda hasil.** Recon Anthropic tanpa session: 2 endpoint.
+  Dengan session: **728 endpoint, 72 bundle JS**. Area ber-login tidak bisa
+  dipetakan dari luar.
+- **JS sering di CDN luar scope.** kai mengambil bundle publik itu tanpa
+  mengirim cookie, dan tidak memasukkannya ke `urls.txt`.
+- **Regex JS menghasilkan path palsu** (`/412`, `${e}`, `:app_id`). kai
+  menormalisasi placeholder jadi `{id}` dan membuang angka murni.
+- **Skor yang semua sama = nol informasi.** 14 endpoint IDOR skor 200 tidak
+  membantu; kai menambah bobot untuk `key_material`, `recovery`, `export`,
+  `balance`, `transfer`, dll.
+
+### Sesi & akses
+
+- **HAR bisa sanitized.** 576 request tapi 0 `Cookie` — itu export browser,
+  bukan bug kai. Cari opsi *Export HAR (with sensitive data)*.
+- **`cf_clearance` terikat IP.** Cookie Cloudflare dari Mac tidak otomatis
+  dipakai VPS. Kalau masih `403 Just a moment...`, itu Cloudflare, bukan session.
+- **Cookie HAR mengandung pihak ketiga.** kai hanya mengimpor cookie untuk host
+  in-scope; analytics/CDN dibuang.
+- **Jangan pernah simpan session di repo atau ZIP.** Setelah selesai, rotasi.
+
+### Workflow
+
+- **`KAI_HOME` lebih aman daripada `./data`.** Tanpa itu, `kai run` dari `/root`
+  membuat workspace baru di `/root/data` dan session lama tidak ketemu.
+- **Audit sebelum serah.** `kai audit` menangkap masalah yang tidak terlihat:
+  hash manifest, score yang beda antarfile, ranked table yang tidak cocok,
+  session yang tanpa sadar ikut ter-pack.
+- **Nama internal tetap.** Produk bernama `kai`, tapi folder `bountykit/` di ZIP
+  tidak boleh diganti.
+
+---
+
+## Trouble cepat
 
 | Gejala | Arti / tindakan |
 |---|---|
-| `no domains` di recon | scope.txt tidak punya host atau wildcard. Isi manual atau ulangi `intake`. |
-| `crt.sh(status 502)` | CT publik sedang gangguan. Cert Spotter jalan paralel; cakupan mungkin kurang lengkap. |
-| verdict `review` | Sumber bukan H1 terstruktur. Verifikasi scope di `policy.md` sebelum `--trust-scope`. |
-| `no host-level scope` | Program web3 / non-HTTP. Pakai `analyze`, bukan `recon`. |
-| GitBook di domain sendiri (`docs.*`) | Tetap dibaca lewat varian `.md` di sebelah halaman. |
-| `mainnet testing is forbidden` | Jangan kirim request ke produksi. Pakai testnet/local fork. |
-| `session none` | Area login belum dipetakan. Impor HAR dulu kalau program mengizinkan. |
-| `rules-diff` baseline | Baru intake pertama; belum ada pembanding. |
+| `no domains` | scope kosong; isi manual atau ulangi `intake` |
+| `crt.sh(status 502)` | CT publik gangguan; Cert Spotter jalan paralel |
+| verdict `review` | sumber heuristic; verifikasi dulu sebelum `--trust-scope` |
+| `bundles 0` | tidak ada script di HTML, atau semua di luar scope |
+| `session none` | HAR belum punya cookie / path salah |
+| `403 Just a moment...` | Cloudflare; butuh session dari browser/IP yang sama |
+| `audit FAIL` | jangan diserahkan ke Kairos; baca baris FAIL |
+| `unknown program` | state root salah → cek `KAI_HOME` / `pwd` |
 
 ---
 
-## Install
+## Instalasi lewat npx?
 
-```bash
-# paling cepat kalau Go sudah ada
-go install github.com/hourx/kai/cmd/kai@latest
+Belum. `npx` adalah runner paket **npm/Node.js**, sedangkan kai adalah biner
+**Go**. Supaya `npx kai` jalan, perlu paket pembungkus kecil (mis.
+`@hourx/kai`) yang mengunduh biner dari GitHub Releases. Itu bisa dibuat
+belakangan — bukan mengubah kai jadi library.
 
-# dari source
-git clone https://github.com/hourx/kai.git
-cd kai
-go build -o bin/kai ./cmd/kai
-go test ./...
-```
+Sekarang: `go install github.com/hourx/kai/cmd/kai@latest`.
 
-Go 1.21+. Tanpa cgo, tanpa dependency eksternal. Biner bisa juga diunduh dari
-GitHub Releases (rencana).
+---
 
-### Soal `npx kai`
+## Status
 
-Belum tersedia, dan itu bukan satu hal yang sama dengan tool ini:
-
-- **npm** = package manager untuk ekosistem **Node.js**
-- **npx** = runner yang mengunduh lalu menjalankan paket npm
-- **kai** = biner **Go**, bukan paket npm / bukan library
-
-Supaya `npx kai` bisa dipakai, perlu paket npm kecil (mis. `@hourx/kai`) yang
-cuma mengunduh biner Go dari GitHub Releases lalu memanggilnya. Itu bisa
-dibuat belakangan setelah rilis stabil — bukan mengubah kai jadi library.
+`kai 0.9.0-dev` — Phase 0–3 lengkap, workflow satu perintah, audit otomatis.
 
 | Versi | Isi |
 |---|---|
 | v0.1–v0.3 | scope gate, pack, recon, diff, session, map, next |
-| v0.4–v0.6 | intake H1 + multi-sumber, boundaries verbatim |
-| v0.7–v0.8 | rule diff, aset non-web, analisis repo/kontrak, referensi dokumentasi |
-| v0.9 | rename identitas `kai`, module & remote GitHub |
-| v1.0 | `run`, `audit`, `doctor` — satu perintah untuk alur penuh |
+| v0.4–v0.6 | intake multi-sumber, boundaries verbatim |
+| v0.7–v0.8 | rule diff, aset non-web, analisis repo/kontrak |
+| v0.9 | identitas `kai`, `run` / `audit` / `doctor` |
+| v1.0 | config file, penguraian repo organisasi, wrapper npm |
+
+Desain lengkap: [`SPEC.md`](SPEC.md).
