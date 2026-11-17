@@ -731,7 +731,41 @@ func intakeSurface(p *workspace.Program) ([]surface.NonWebAsset, []string) {
 		out = append(out, surface.NonWebAsset{Identifier: a.Identifier, Type: a.Type, Detail: "path-restricted, no host rule"})
 	}
 	for _, c := range in.Candidates {
-		out = append(out, surface.NonWebAsset{Identifier: c.Identifier, Type: c.Type, Detail: "section: " + c.Section, Unverified: !in.TrustScope})
+		// A bare GitHub organisation URL is not a repo; don't rank it above
+		// the concrete repositories enumerated by analyze.
+		orgURL := false
+		if strings.HasPrefix(c.Identifier, "https://github.com/") || strings.HasPrefix(c.Identifier, "http://github.com/") {
+			rest := strings.TrimPrefix(strings.TrimPrefix(c.Identifier, "https://"), "http://")
+			rest = strings.TrimSuffix(rest, "/")
+			parts := strings.Split(rest, "/")
+			orgURL = len(parts) == 2
+		}
+		out = append(out, surface.NonWebAsset{Identifier: c.Identifier, Type: c.Type, Detail: "section: " + c.Section, Unverified: !in.TrustScope || orgURL})
+	}
+	// Repositories enumerated from an organisation URL live in nonweb.json,
+	// not in intake.json. Fold the most recent ones into the queue too.
+	if rep, err := nonweb.Load(p); err == nil {
+		seen := map[string]bool{}
+		for _, a := range out {
+			seen[strings.TrimSuffix(a.Identifier, "/")] = true
+		}
+		added := 0
+		for _, r := range rep.Repos {
+			key := strings.TrimSuffix(r.URL, "/")
+			if key == "" || seen[key] {
+				continue
+			}
+			detail := r.Description
+			if r.Origin != "" {
+				detail = r.Origin + " — " + detail
+			}
+			out = append(out, surface.NonWebAsset{Identifier: key, Type: "SOURCE_CODE", Detail: detail})
+			seen[key] = true
+			added++
+			if added >= 12 {
+				break
+			}
+		}
 	}
 	enrichNonWeb(p, out)
 	return out, in.Boundaries.Notes

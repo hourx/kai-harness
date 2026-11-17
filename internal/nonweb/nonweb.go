@@ -9,6 +9,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -17,6 +18,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hourx/kai/internal/netx"
 	"github.com/hourx/kai/internal/program"
 	"github.com/hourx/kai/internal/workspace"
 )
@@ -39,6 +41,8 @@ type Repo struct {
 	Scripts     []string   `json:"scripts,omitempty"`
 	EntryPoints []string   `json:"entry_points,omitempty"`
 	Risks       []string   `json:"risks,omitempty"`
+	Description string     `json:"description,omitempty"`
+	Origin      string     `json:"origin,omitempty"`
 	Error       string     `json:"error,omitempty"`
 }
 
@@ -69,9 +73,74 @@ type Options struct {
 
 var (
 	slugRE     = regexp.MustCompile(`github\.com[:/]([A-Za-z0-9_.-]+)/([A-Za-z0-9_.-]+?)(?:\.git)?(?:[/#?].*)?$`)
+	orgRE      = regexp.MustCompile(`(?i)^https?://github\.com/([A-Za-z0-9_.-]+)/?$`)
 	addressRE  = regexp.MustCompile(`0x[0-9a-fA-F]{40}`)
 	explorerRE = regexp.MustCompile(`https://([a-z0-9.-]*scan[a-z0-9.-]*)/address/`)
 )
+
+// githubAPI is a var so tests can point it at a local server.
+var githubAPI = "https://api.github.com"
+
+type ghRepo struct {
+	FullName    string `json:"full_name"`
+	HTMLURL     string `json:"html_url"`
+	Archived    bool   `json:"archived"`
+	Fork        bool   `json:"fork"`
+	Description string `json:"description"`
+	UpdatedAt   string `json:"updated_at"`
+}
+
+// listOrgRepos reads public repositories for a GitHub user or organisation.
+// It deliberately uses a client without any session: the GitHub API never
+// receives target cookies.
+func listOrgRepos(ctx context.Context, org string) ([]ghRepo, string) {
+	c := netx.New("kai-nonweb/0.9", 5, nil)
+	defer c.Close()
+
+	var out []ghRepo
+	for page := 1; page <= 2; page++ {
+		u := fmt.Sprintf("%s/users/%s/repos?per_page=100&page=%d&type=public&sort=updated",
+			githubAPI, url.PathEscape(org), page)
+		resp, err := c.Get(ctx, u, 4<<20)
+		if err != nil {
+			return out, "GitHub API error: " + err.Error()
+		}
+		if resp.StatusCode == 403 || resp.StatusCode == 429 {
+			return out, "GitHub API rate-limited — set GITHUB_TOKEN or try again later"
+		}
+		if resp.StatusCode != 200 {
+			return out, fmt.Sprintf("GitHub API HTTP %d", resp.StatusCode)
+		}
+		var batch []ghRepo
+		if err := json.Unmarshal(resp.Body, &batch); err != nil {
+			return out, "GitHub API returned invalid JSON"
+		}
+		out = append(out, batch...)
+		if len(batch) < 100 {
+			break
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].UpdatedAt > out[j].UpdatedAt })
+	return out, ""
+}
+
+// usableRepos drops archived and forked repos: most bounty policies exclude
+// them unless a direct impact on the company's own assets is demonstrated.
+func usableRepos(repos []ghRepo, max int) ([]ghRepo, int) {
+	var out []ghRepo
+	skipped := 0
+	for _, r := range repos {
+		if r.Archived || r.Fork {
+			skipped++
+			continue
+		}
+		out = append(out, r)
+		if len(out) >= max {
+			break
+		}
+	}
+	return out, skipped
+}
 
 // Analyze reads Phase 0 intake and enriches non-web assets.
 func Analyze(ctx context.Context, p *workspace.Program, opts Options) (Report, error) {
@@ -114,8 +183,33 @@ func Analyze(ctx context.Context, p *workspace.Program, opts Options) (Report, e
 		repoURLs = repoURLs[:12]
 	}
 	for _, u := range repoURLs {
-		repo := analyzeRepo(ctx, p, u, opts, logf)
-		rep.Repos = append(rep.Repos, repo)
+		if m := orgRE.FindStringSubmatch(strings.TrimSuffix(u, "/")); m != nil {
+			org := m[1]
+			found, note := listOrgRepos(ctx, org)
+			if note != "" {
+				rep.Notes = append(rep.Notes, note)
+			}
+			repos, skipped := usableRepos(found, 30)
+			rep.Notes = append(rep.Notes, fmt.Sprintf("GitHub %s: %d public repos listed, %d eligible (archived/forks excluded)", org, len(found), len(repos)))
+			if skipped > 0 {
+				rep.Notes = append(rep.Notes, fmt.Sprintf("%d repo(s) skipped as archived or fork — check the policy before claiming impact", skipped))
+			}
+			if len(found) > 30 {
+				rep.Notes = append(rep.Notes, "only the 30 most recently updated repos are tracked")
+			}
+			for _, r := range repos {
+				url := r.HTMLURL
+				if url == "" && r.FullName != "" {
+					url = "https://github.com/" + r.FullName
+				}
+				rr := analyzeRepo(ctx, p, url, opts, logf)
+				rr.Origin = "GitHub API: " + org
+				rr.Description = r.Description
+				rep.Repos = append(rep.Repos, rr)
+			}
+			continue
+		}
+		rep.Repos = append(rep.Repos, analyzeRepo(ctx, p, u, opts, logf))
 	}
 
 	// Contract addresses from structured scope and from prose.
@@ -362,6 +456,12 @@ func (rep Report) Markdown() string {
 	for _, r := range rep.Repos {
 		fmt.Fprintf(&b, "## Repo `%s` — %s\n\n", r.Slug, r.Status)
 		fmt.Fprintf(&b, "URL: %s\n", r.URL)
+		if r.Origin != "" {
+			fmt.Fprintf(&b, "Origin: %s\n", r.Origin)
+		}
+		if r.Description != "" {
+			fmt.Fprintf(&b, "About: %s\n", r.Description)
+		}
 		if r.Error != "" {
 			fmt.Fprintf(&b, "Note: %s\n\n", r.Error)
 		}

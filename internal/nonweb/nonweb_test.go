@@ -2,6 +2,8 @@ package nonweb
 
 import (
 	"context"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -9,6 +11,78 @@ import (
 
 	"github.com/hourx/kai/internal/workspace"
 )
+
+func TestListOrgReposAndFilter(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !strings.Contains(r.URL.Path, "/users/anthropics/repos") {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		_, _ = w.Write([]byte(`[
+		 {"full_name":"anthropics/claude-code","html_url":"https://github.com/anthropics/claude-code","updated_at":"2026-11-01T00:00:00Z"},
+		 {"full_name":"anthropics/old","html_url":"https://github.com/anthropics/old","archived":true,"updated_at":"2026-11-02T00:00:00Z"},
+		 {"full_name":"anthropics/forked","html_url":"https://github.com/anthropics/forked","fork":true,"updated_at":"2026-11-03T00:00:00Z"}
+		]`))
+	}))
+	defer srv.Close()
+	old := githubAPI
+	githubAPI = srv.URL
+	defer func() { githubAPI = old }()
+
+	found, note := listOrgRepos(context.Background(), "anthropics")
+	if note != "" {
+		t.Fatalf("note = %q", note)
+	}
+	if len(found) != 3 {
+		t.Fatalf("found %d repos, want 3", len(found))
+	}
+	usable, skipped := usableRepos(found, 30)
+	if len(usable) != 1 || skipped != 2 {
+		t.Fatalf("usable = %d, skipped = %d", len(usable), skipped)
+	}
+	if usable[0].FullName != "anthropics/claude-code" {
+		t.Errorf("kept the wrong repo: %+v", usable[0])
+	}
+}
+
+func TestAnalyzeExpandsOrgURL(t *testing.T) {
+	t.Setenv("BOUNTYKIT_HOME", t.TempDir())
+	p, err := workspace.Create("demo", workspace.Meta{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	intake := `{"platform":"h1","confidence":"structured","name":"Demo","url":"https://hackerone.com/demo",
+	  "fetched_at":"2026-11-17T00:00:00Z","assets":[
+	    {"identifier":"https://github.com/anthropics","type":"SOURCE_CODE","eligible_for_submission":true}
+	  ]}`
+	if err := os.WriteFile(filepath.Join(p.Dir, "intake.json"), []byte(intake), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`[
+		 {"full_name":"anthropics/sdk","html_url":"https://github.com/anthropics/sdk","description":"Agent SDK","updated_at":"2026-11-04T00:00:00Z"},
+		 {"full_name":"anthropics/archived","html_url":"https://github.com/anthropics/archived","archived":true,"updated_at":"2026-11-05T00:00:00Z"}
+		]`))
+	}))
+	defer srv.Close()
+	old := githubAPI
+	githubAPI = srv.URL
+	defer func() { githubAPI = old }()
+
+	rep, err := Analyze(context.Background(), p, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rep.Repos) != 1 || rep.Repos[0].Slug != "anthropics-sdk" {
+		t.Fatalf("repos = %+v", rep.Repos)
+	}
+	if rep.Repos[0].Description != "Agent SDK" || rep.Repos[0].Status != "not-cloned" {
+		t.Errorf("repo metadata = %+v", rep.Repos[0])
+	}
+	if !strings.Contains(strings.Join(rep.Notes, " "), "archived/forks excluded") {
+		t.Errorf("notes missing exclusion info: %v", rep.Notes)
+	}
+}
 
 func TestScanRepoFindsWorkflowRisks(t *testing.T) {
 	dir := t.TempDir()

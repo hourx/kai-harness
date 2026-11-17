@@ -213,6 +213,9 @@ Hal-hal yang nyata ditemukan saat membangun dan menguji kai:
   mengirim cookie, dan tidak memasukkannya ke `urls.txt`.
 - **Regex JS menghasilkan path palsu** (`/412`, `${e}`, `:app_id`). kai
   menormalisasi placeholder jadi `{id}` dan membuang angka murni.
+- **Repo organisasi bisa diuraikan.** `github.com/org` kini diambil daftar
+  repo publiknya lewat GitHub API (max 30 terbaru); repo archived/fork dilewati
+  sesuai kebanyakan policy. Tanpa token, API publik rate-limited ~60/jam.
 - **Skor yang semua sama = nol informasi.** 14 endpoint IDOR skor 200 tidak
   membantu; kai menambah bobot untuk `key_material`, `recovery`, `export`,
   `balance`, `transfer`, dll.
