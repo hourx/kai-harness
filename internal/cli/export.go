@@ -2,15 +2,62 @@ package cli
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/hourx/kai/internal/program"
 	"github.com/hourx/kai/internal/workspace"
 )
+
+func safeSlug(s string) string {
+	s = strings.ToLower(strings.TrimSuffix(s, "/"))
+	var b strings.Builder
+	for _, r := range s {
+		switch {
+		case r >= 'a' && r <= 'z', r >= '0' && r <= '9', r == '-', r == '_':
+			b.WriteRune(r)
+		default:
+			b.WriteRune('-')
+		}
+	}
+	out := strings.Trim(b.String(), "-")
+	for strings.Contains(out, "--") {
+		out = strings.ReplaceAll(out, "--", "-")
+	}
+	if out == "" {
+		out = "page"
+	}
+	return out
+}
+
+func pageMarkdown(p program.PageDoc) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "# %s\n\n", p.Title)
+	fmt.Fprintf(&b, "Source: %s\n\n", p.URL)
+	b.WriteString("## Scope (verbatim)\n\n")
+	if p.Scope == "" {
+		b.WriteString("- not stated on this page\n")
+	} else {
+		b.WriteString(p.Scope + "\n")
+	}
+	b.WriteString("\n## Out of scope (verbatim)\n\n")
+	if p.OutOfScope == "" {
+		b.WriteString("- not stated on this page\n")
+	} else {
+		b.WriteString(p.OutOfScope + "\n")
+	}
+	b.WriteString("\n## Full text\n\n")
+	b.WriteString(p.Body)
+	if !strings.HasSuffix(p.Body, "\n") {
+		b.WriteString("\n")
+	}
+	return b.String()
+}
 
 // cmdExport writes the agent-facing context set into a Kairos campaign folder.
 // It is still a pure context export: no hunting, no validation, no submission,
@@ -72,6 +119,42 @@ func cmdExport(args []string) int {
 		fmt.Println("wrote", dest)
 		wrote++
 	}
+
+	// Per-page scope and the AI-agent rulebook come from the last intake.
+	var in program.Intake
+	if raw, err := os.ReadFile(filepath.Join(p.Dir, "intake.json")); err == nil {
+		_ = json.Unmarshal(raw, &in)
+	}
+	if len(in.Pages) > 0 {
+		pagesDir := filepath.Join(*to, "pages")
+		if err := os.MkdirAll(pagesDir, 0o755); err != nil {
+			return fail(err)
+		}
+		used := map[string]bool{}
+		for _, page := range in.Pages {
+			base := safeSlug(page.URL)
+			name := base
+			for i := 2; used[name]; i++ {
+				name = fmt.Sprintf("%s-%d", base, i)
+			}
+			used[name] = true
+			dest := filepath.Join(pagesDir, name+".md")
+			if err := os.WriteFile(dest, []byte(pageMarkdown(page)), 0o600); err != nil {
+				return fail(err)
+			}
+			fmt.Println("wrote", dest)
+			wrote++
+			if strings.HasSuffix(strings.ToLower(strings.TrimSuffix(page.URL, "/")), "llms.txt") {
+				dest := filepath.Join(*to, "llms.md")
+				if err := os.WriteFile(dest, []byte(pageMarkdown(page)), 0o600); err != nil {
+					return fail(err)
+				}
+				fmt.Println("wrote", dest)
+				wrote++
+			}
+		}
+	}
+
 	for _, name := range copied {
 		src := filepath.Join(p.Dir, name)
 		b, err := os.ReadFile(src)

@@ -60,6 +60,17 @@ type Reference struct {
 	Status string `json:"status,omitempty"`
 }
 
+// PageDoc is one fetched reference page kept as per-page context. The agent
+// needs scope and out-of-scope verbatim per category, not one merged policy
+// where those sections lose their owner.
+type PageDoc struct {
+	URL        string `json:"url"`
+	Title      string `json:"title,omitempty"`
+	Scope      string `json:"scope,omitempty"`
+	OutOfScope string `json:"out_of_scope,omitempty"`
+	Body       string `json:"body,omitempty"`
+}
+
 // Intake is everything Phase 0 can learn without logging in.
 type Intake struct {
 	Platform      string                  `json:"platform"`
@@ -88,6 +99,8 @@ type Intake struct {
 	Candidates    []Candidate             `json:"candidate_assets,omitempty"`
 	References    []Reference             `json:"references,omitempty"`
 	Discovered    []Reference             `json:"discovered,omitempty"`
+	Pages         []PageDoc               `json:"pages,omitempty"`
+	LLMs          []Reference             `json:"llms,omitempty"`
 	Constraints   []string                `json:"constraints,omitempty"`
 	Boundaries    Boundaries              `json:"boundaries,omitempty"`
 	TrustScope    bool                    `json:"trust_scope,omitempty"`
@@ -592,6 +605,17 @@ func (in *Intake) Markdown() string {
 		}
 		b.WriteString("\nThese links were found in the page HTML, including JavaScript-rendered ")
 		b.WriteString("landing pages. Only those listed under 'Documentation read' were fetched.\n\n")
+	}
+
+	if len(in.LLMs) > 0 {
+		b.WriteString("## AI-agent rules (llms.txt)\n\n")
+		for _, r := range in.LLMs {
+			fmt.Fprintf(&b, "- `%s` — %s (%s)\n", r.URL, dash(r.Title), r.Status)
+		}
+		b.WriteString("\nThese rules are mandatory for automated research and are exported as context/llms.md.\n\n")
+	}
+	if len(in.Pages) > 0 {
+		fmt.Fprintf(&b, "## Per-page context\n\n%d reference page(s) kept with verbatim scope sections — exported as context/pages/.\n\n", len(in.Pages))
 	}
 
 	if len(in.References) > 0 {

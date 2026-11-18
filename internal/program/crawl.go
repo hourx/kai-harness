@@ -35,7 +35,10 @@ var (
 	// readable text often contains only the anchor label. Read both.
 	hrefRE     = regexp.MustCompile(`(?i)href\s*=\s*["']([^"']+)["']`)
 	relevantRE = regexp.MustCompile(`(?i)(testnet|mainnet|bug.?bounty|security|report|submit|reward|scope|policy|faucet|guide|api|developer|docs|whitepaper|terms)`)
-	skipAsset  = regexp.MustCompile(`(?i)\.(png|jpe?g|gif|svg|ico|woff2?|ttf|pdf|zip|json|js|css)(\?|$)|/files/|llms\.txt|/assets/|_next/`)
+	// llms.txt is not an asset to skip: it is the machine-readable rulebook for
+	// AI agents. It is fetched first-class and does not consume the doc cap.
+	llmsRE    = regexp.MustCompile(`(?i)^.*/llms\.txt$|^llms\.txt$`)
+	skipAsset = regexp.MustCompile(`(?i)\.(png|jpe?g|gif|svg|ico|woff2?|ttf|pdf|zip|json|js|css)(\?|$)|/files/|/assets/|_next/`)
 )
 
 // linkScore ranks doc links before the fetch cap is applied. A cap that fills
@@ -64,22 +67,37 @@ func linkScore(u *url.URL) int {
 	return score
 }
 
+// pageDoc keeps a fetched page's own scope sections verbatim. A merged policy
+// loses which rule came from which category page; export needs that mapping.
+func pageDoc(title, url, text string) PageDoc {
+	if len(text) > 40_000 {
+		text = text[:40_000] + "\n[… truncated; see the source page]"
+	}
+	return PageDoc{
+		URL:        url,
+		Title:      title,
+		Scope:      trimExcerpt(sectionByTitle(text, "in scope", "scope", "assets in scope")),
+		OutOfScope: trimExcerpt(sectionByTitle(text, "out of scope", "not in scope", "exclusions")),
+		Body:       text,
+	}
+}
+
 // followReferences reads other pages linked from the main policy. Public bug
 // bounty docs routinely split scope, testnet access and submission rules over
 // several pages; reading only the first one gives a dangerously partial view.
 //
 // Only pages on the same registrable domain are followed, with a hard cap, so
 // this never turns into an unbounded crawl of the whole internet.
-func followReferences(ctx context.Context, c *netx.Client, primary *url.URL, policy, rawHTML string, opts FetchOptions, gitbook bool) ([]Reference, []Reference, []string, []Candidate) {
+func followReferences(ctx context.Context, c *netx.Client, primary *url.URL, policy, rawHTML string, opts FetchOptions, gitbook bool) ([]Reference, []Reference, []string, []Candidate, []PageDoc, []Reference) {
 	opts = opts.defaults()
 	if opts.MaxLinks == 0 {
-		return nil, nil, nil, nil
+		return nil, nil, nil, nil, nil, nil
 	}
 	base := baseDomain(primary.Hostname())
 	selfPath := strings.TrimSuffix(strings.ToLower(primary.Path), "/")
 	seen := map[string]bool{strings.TrimSuffix(primary.String(), "/"): true}
 	scores := map[string]int{}
-	var targets, discovered []string
+	var targets, discovered, llmsTargets []string
 
 	consider := func(raw string) {
 		raw = strings.TrimRight(raw, ".,;:)>")
@@ -103,6 +121,14 @@ func followReferences(ctx context.Context, c *netx.Client, primary *url.URL, pol
 		// "#lc-icon__burger" is a UI anchor, not a documentation page.
 		if u.Fragment != "" && strings.TrimSuffix(strings.ToLower(u.Path), "/") == selfPath {
 			return
+		}
+		if llmsRE.MatchString(strings.ToLower(u.Path)) {
+			key := strings.TrimSuffix(u.String(), "/")
+			if !seen[key] {
+				seen[key] = true
+				llmsTargets = append(llmsTargets, u.String())
+			}
+			return // fetched first-class, outside the documentation cap
 		}
 		if skipAsset.MatchString(u.String()) {
 			return
@@ -152,6 +178,7 @@ func followReferences(ctx context.Context, c *netx.Client, primary *url.URL, pol
 	var refs []Reference
 	var texts []string
 	var found []Candidate
+	var docs []PageDoc
 	discoveredRefs := make([]Reference, 0, len(discovered))
 	for _, u := range discovered {
 		discoveredRefs = append(discoveredRefs, Reference{URL: u, Status: "seen"})
@@ -166,10 +193,32 @@ func followReferences(ctx context.Context, c *netx.Client, primary *url.URL, pol
 		} else {
 			texts = append(texts, fmt.Sprintf("## Referenced page: %s\nSource: %s\n\n%s", title, target, text))
 			found = append(found, hostsFromText(text, title)...)
+			docs = append(docs, pageDoc(title, target, text))
 		}
 		refs = append(refs, ref)
 	}
-	return refs, discoveredRefs, texts, found
+
+	// llms.txt is the machine-readable rulebook for AI agents. Fetch it even
+	// when MaxLinks is exhausted; it is mandatory context and never a finding.
+	var llmsRefs []Reference
+	for _, target := range llmsTargets {
+		title, text, _, err := fetchPage(ctx, c, target, gitbook)
+		ref := Reference{URL: target, Title: title, Status: "read"}
+		if err != nil {
+			ref.Status = "error: " + err.Error()
+		} else if len(text) < 100 {
+			ref.Status = "empty"
+		} else {
+			llmTitle := title
+			if llmTitle == "" {
+				llmTitle = "llms.txt"
+			}
+			texts = append(texts, fmt.Sprintf("## AI-agent rules: %s\nSource: %s\n\n%s", llmTitle, target, text))
+			docs = append(docs, pageDoc(llmTitle, target, text))
+		}
+		llmsRefs = append(llmsRefs, ref)
+	}
+	return refs, discoveredRefs, texts, found, docs, llmsRefs
 }
 
 // hostsFromText picks up concrete hosts mentioned in a linked page, such as

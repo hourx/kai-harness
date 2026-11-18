@@ -41,7 +41,7 @@ func TestHrefDiscoveryFromJSLanding(t *testing.T) {
 	c := netx.New("test", 50, nil)
 	defer c.Close()
 	u, _ := url.Parse(srv.URL + "/bugbounty")
-	refs, discovered, texts, _ := followReferences(context.Background(), c, u,
+	refs, discovered, texts, _, docs, llmsRefs := followReferences(context.Background(), c, u,
 		"Bug bounty program", shellHTML,
 		FetchOptions{MaxLinks: 1}, false)
 
@@ -63,8 +63,14 @@ func TestHrefDiscoveryFromJSLanding(t *testing.T) {
 			t.Errorf("UI anchor must not be a reference: %+v", discovered)
 		}
 	}
-	if len(refs) != 1 || len(texts) != 1 {
-		t.Fatalf("refs=%+v texts=%d, want one fetched page", refs, len(texts))
+	if len(refs) != 1 {
+		t.Fatalf("refs=%+v, want one capped doc page", refs)
+	}
+	if len(llmsRefs) != 1 || !strings.Contains(llmsRefs[0].URL, "llms.txt") {
+		t.Errorf("llmsRefs=%+v, want llms.txt fetched first-class", llmsRefs)
+	}
+	if len(docs) != 2 || len(texts) != 2 {
+		t.Fatalf("docs=%d texts=%d, want one normal page plus llms.txt", len(docs), len(texts))
 	}
 	if !strings.Contains(refs[0].URL, "/i/report") {
 		t.Errorf("cap picked %s, want the higher-scoring report page", refs[0].URL)
@@ -113,7 +119,7 @@ func TestFollowReferencesSameDomainOnly(t *testing.T) {
 	defer c.Close()
 	u, _ := url.Parse(srv.URL)
 	policy := "GitBook main. [Testnet Guide](http://" + u.Host + "/testnet-guide) and [External](https://evil.test/steal)."
-	refs, discovered, texts, cands := followReferences(context.Background(), c, u, policy, "", FetchOptions{MaxLinks: 5}, true)
+	refs, discovered, texts, cands, _, _ := followReferences(context.Background(), c, u, policy, "", FetchOptions{MaxLinks: 5}, true)
 
 	if len(refs) != 1 || !strings.Contains(refs[0].URL, "testnet-guide") {
 		t.Errorf("refs = %+v", refs)
