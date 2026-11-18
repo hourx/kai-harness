@@ -6,6 +6,7 @@ import (
 	"html"
 	"net/url"
 	"regexp"
+	"sort"
 	"strings"
 
 	"github.com/hourx/kai/internal/netx"
@@ -37,6 +38,32 @@ var (
 	skipAsset  = regexp.MustCompile(`(?i)\.(png|jpe?g|gif|svg|ico|woff2?|ttf|pdf|zip|json|js|css)(\?|$)|/files/|llms\.txt|/assets/|_next/`)
 )
 
+// linkScore ranks doc links before the fetch cap is applied. A cap that fills
+// up with "Hall of fame" and payment settings is worse than no cap: the pages
+// that define scope are never read and the agent is handed a partial policy.
+func linkScore(u *url.URL) int {
+	p := strings.ToLower(u.Path)
+	score := 0
+	for _, kw := range []struct {
+		word string
+		pts  int
+	}{
+		{"main-scope", 100}, {"rules", 90}, {"scope", 80}, {"report", 70},
+		{"security", 60}, {"testnet", 60}, {"ai-security", 55}, {"policy", 50},
+		{"terms", 40}, {"faq", 40}, {"guide", 30}, {"docs", 20}, {"api", 20},
+	} {
+		if strings.Contains(p, kw.word) {
+			score += kw.pts
+		}
+	}
+	for _, low := range []string{"payment", "hall-of-fame", "anniversary", "blog", "index"} {
+		if strings.Contains(p, low) {
+			score -= 60
+		}
+	}
+	return score
+}
+
 // followReferences reads other pages linked from the main policy. Public bug
 // bounty docs routinely split scope, testnet access and submission rules over
 // several pages; reading only the first one gives a dangerously partial view.
@@ -51,6 +78,7 @@ func followReferences(ctx context.Context, c *netx.Client, primary *url.URL, pol
 	base := baseDomain(primary.Hostname())
 	selfPath := strings.TrimSuffix(strings.ToLower(primary.Path), "/")
 	seen := map[string]bool{strings.TrimSuffix(primary.String(), "/"): true}
+	scores := map[string]int{}
 	var targets, discovered []string
 
 	consider := func(raw string) {
@@ -72,6 +100,10 @@ func followReferences(ctx context.Context, c *netx.Client, primary *url.URL, pol
 		if q.Has("ask") || q.Has("goal") {
 			return
 		}
+		// "#lc-icon__burger" is a UI anchor, not a documentation page.
+		if u.Fragment != "" && strings.TrimSuffix(strings.ToLower(u.Path), "/") == selfPath {
+			return
+		}
 		if skipAsset.MatchString(u.String()) {
 			return
 		}
@@ -91,12 +123,11 @@ func followReferences(ctx context.Context, c *netx.Client, primary *url.URL, pol
 			return
 		}
 		seen[key] = true
+		scores[u.String()] = linkScore(u)
 		if len(discovered) < 50 {
 			discovered = append(discovered, u.String())
 		}
-		if len(targets) < opts.MaxLinks {
-			targets = append(targets, u.String())
-		}
+		targets = append(targets, u.String())
 	}
 
 	for _, m := range mdLinkRE.FindAllStringSubmatch(policy, -1) {
@@ -107,6 +138,15 @@ func followReferences(ctx context.Context, c *netx.Client, primary *url.URL, pol
 	}
 	for _, m := range hrefRE.FindAllStringSubmatch(rawHTML, -1) {
 		consider(m[1])
+	}
+
+	// Fetch the useful pages first. A DOM-order cap fills up with payment
+	// settings and the hall of fame while scope rules stay unread.
+	sort.SliceStable(targets, func(i, j int) bool {
+		return scores[targets[i]] > scores[targets[j]]
+	})
+	if len(targets) > opts.MaxLinks {
+		targets = targets[:opts.MaxLinks]
 	}
 
 	var refs []Reference

@@ -25,11 +25,12 @@ func TestHrefDiscoveryFromJSLanding(t *testing.T) {
 		`<a href="/bugbounty/i/cloud">Cloud</a>` +
 		`<a href="/bugbounty/i/report">Report</a>` +
 		`<a href="/bugbounty/i/llms.txt">llms</a>` +
+		`<a href="/bugbounty/#lc-icon__burger">menu</a>` +
 		`</body></html>`
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/bugbounty/i/cloud" {
-			w.Write([]byte("Cloud scope page with enough readable text to be fetched. " +
-				"Visit api.example.com for the testnet guide. Report to security@example.com."))
+		if strings.HasPrefix(r.URL.Path, "/bugbounty/i/") {
+			w.Write([]byte("Documentation page with enough readable text to be fetched. " +
+				"Scope rules live on api.example.com. Report to security@example.com."))
 			return
 		}
 		// A JS shell: readable text is short, but every doc link is in an href.
@@ -57,8 +58,16 @@ func TestHrefDiscoveryFromJSLanding(t *testing.T) {
 	if seen[srv.URL+"/bugbounty/i/llms.txt"] {
 		t.Errorf("llms.txt must be filtered as an asset: %+v", discovered)
 	}
+	for _, d := range discovered {
+		if strings.Contains(d.URL, "#lc-icon__burger") {
+			t.Errorf("UI anchor must not be a reference: %+v", discovered)
+		}
+	}
 	if len(refs) != 1 || len(texts) != 1 {
-		t.Errorf("refs=%+v texts=%d, want one fetched page", refs, len(texts))
+		t.Fatalf("refs=%+v texts=%d, want one fetched page", refs, len(texts))
+	}
+	if !strings.Contains(refs[0].URL, "/i/report") {
+		t.Errorf("cap picked %s, want the higher-scoring report page", refs[0].URL)
 	}
 }
 
