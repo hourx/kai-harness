@@ -87,6 +87,7 @@ type Intake struct {
 	Assets        []Asset                 `json:"assets,omitempty"`
 	Candidates    []Candidate             `json:"candidate_assets,omitempty"`
 	References    []Reference             `json:"references,omitempty"`
+	Discovered    []Reference             `json:"discovered,omitempty"`
 	Constraints   []string                `json:"constraints,omitempty"`
 	Boundaries    Boundaries              `json:"boundaries,omitempty"`
 	TrustScope    bool                    `json:"trust_scope,omitempty"`
@@ -582,6 +583,15 @@ func (in *Intake) Markdown() string {
 			fmt.Fprintf(&b, "- %s\n", c)
 		}
 		b.WriteString("\n")
+	}
+
+	if len(in.Discovered) > 0 {
+		b.WriteString("## Documentation discovered (linked from the main page)\n\n")
+		for _, r := range in.Discovered {
+			fmt.Fprintf(&b, "- `%s` — %s (%s)\n", r.URL, dash(r.Title), r.Status)
+		}
+		b.WriteString("\nThese links were found in the page HTML, including JavaScript-rendered ")
+		b.WriteString("landing pages. Only those listed under 'Documentation read' were fetched.\n\n")
 	}
 
 	if len(in.References) > 0 {

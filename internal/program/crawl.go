@@ -28,8 +28,11 @@ func (o FetchOptions) defaults() FetchOptions {
 }
 
 var (
-	mdLinkRE   = regexp.MustCompile(`\]\((https?://[^)\s]+)\)`)
-	bareURLRE  = regexp.MustCompile(`https?://[^\s<>"')\]}]+`)
+	mdLinkRE  = regexp.MustCompile(`\]\((https?://[^)\s]+)\)`)
+	bareURLRE = regexp.MustCompile(`https?://[^\s<>"')\]}]+`)
+	// JS-heavy pages hide their documentation links in href attributes; the
+	// readable text often contains only the anchor label. Read both.
+	hrefRE     = regexp.MustCompile(`(?i)href\s*=\s*["']([^"']+)["']`)
 	relevantRE = regexp.MustCompile(`(?i)(testnet|mainnet|bug.?bounty|security|report|submit|reward|scope|policy|faucet|guide|api|developer|docs|whitepaper|terms)`)
 	skipAsset  = regexp.MustCompile(`(?i)\.(png|jpe?g|gif|svg|ico|woff2?|ttf|pdf|zip|json|js|css)(\?|$)|/files/|llms\.txt|/assets/|_next/`)
 )
@@ -40,64 +43,79 @@ var (
 //
 // Only pages on the same registrable domain are followed, with a hard cap, so
 // this never turns into an unbounded crawl of the whole internet.
-func followReferences(ctx context.Context, c *netx.Client, primary *url.URL, policy string, opts FetchOptions, gitbook bool) ([]Reference, []string, []Candidate) {
+func followReferences(ctx context.Context, c *netx.Client, primary *url.URL, policy, rawHTML string, opts FetchOptions, gitbook bool) ([]Reference, []Reference, []string, []Candidate) {
 	opts = opts.defaults()
 	if opts.MaxLinks == 0 {
-		return nil, nil, nil
+		return nil, nil, nil, nil
 	}
 	base := baseDomain(primary.Hostname())
 	selfPath := strings.TrimSuffix(strings.ToLower(primary.Path), "/")
 	seen := map[string]bool{strings.TrimSuffix(primary.String(), "/"): true}
-	var targets []string
+	var targets, discovered []string
 
-	consider := func(raw string) bool {
+	consider := func(raw string) {
 		raw = strings.TrimRight(raw, ".,;:)>")
 		raw = strings.ReplaceAll(raw, "&amp;", "&")
 		u, err := url.Parse(raw)
-		if err != nil || u.Hostname() == "" || (u.Scheme != "http" && u.Scheme != "https") {
-			return false
+		if err != nil {
+			return
+		}
+		// Most landing pages use relative hrefs. Without this, every doc
+		// link on a JS-rendered policy page is dropped before it is seen.
+		if u.Hostname() == "" {
+			u = primary.ResolveReference(u)
+		}
+		if u.Hostname() == "" || (u.Scheme != "http" && u.Scheme != "https") {
+			return
 		}
 		q := u.Query()
 		if q.Has("ask") || q.Has("goal") {
-			return false
+			return
 		}
 		if skipAsset.MatchString(u.String()) {
-			return false
+			return
 		}
 		host := strings.ToLower(u.Hostname())
 		trimmedPath := strings.TrimSuffix(strings.ToLower(u.Path), ".md")
 		if trimmedPath == selfPath && strings.HasSuffix(u.Path, ".md") {
-			return false // the same page in markdown form, not a new reference
+			return // the same page in markdown form, not a new reference
 		}
 		if host != primary.Hostname() && !strings.HasSuffix(host, "."+base) {
-			return false
+			return
 		}
 		if !relevantRE.MatchString(u.Path + " " + u.String()) {
-			return false
+			return
 		}
 		key := strings.TrimSuffix(u.String(), "/")
 		if seen[key] {
-			return false
+			return
 		}
 		seen[key] = true
-		targets = append(targets, u.String())
-		return len(targets) >= opts.MaxLinks
+		if len(discovered) < 50 {
+			discovered = append(discovered, u.String())
+		}
+		if len(targets) < opts.MaxLinks {
+			targets = append(targets, u.String())
+		}
 	}
 
 	for _, m := range mdLinkRE.FindAllStringSubmatch(policy, -1) {
-		if consider(m[1]) {
-			break
-		}
+		consider(m[1])
 	}
 	for _, raw := range bareURLRE.FindAllString(policy, -1) {
-		if consider(raw) {
-			break
-		}
+		consider(raw)
+	}
+	for _, m := range hrefRE.FindAllStringSubmatch(rawHTML, -1) {
+		consider(m[1])
 	}
 
 	var refs []Reference
 	var texts []string
 	var found []Candidate
+	discoveredRefs := make([]Reference, 0, len(discovered))
+	for _, u := range discovered {
+		discoveredRefs = append(discoveredRefs, Reference{URL: u, Status: "seen"})
+	}
 	for _, target := range targets {
 		title, text, _, err := fetchPage(ctx, c, target, gitbook)
 		ref := Reference{URL: target, Title: title, Status: "read"}
@@ -111,7 +129,7 @@ func followReferences(ctx context.Context, c *netx.Client, primary *url.URL, pol
 		}
 		refs = append(refs, ref)
 	}
-	return refs, texts, found
+	return refs, discoveredRefs, texts, found
 }
 
 // hostsFromText picks up concrete hosts mentioned in a linked page, such as

@@ -154,11 +154,11 @@ func FetchWeb(ctx context.Context, c *netx.Client, raw string, options ...FetchO
 		return nil, fmt.Errorf("%s produced too little readable text (%d bytes)", fetchURL, len(policy))
 	}
 
-	var refs []Reference
+	var refs, discovered []Reference
 	var refCandidates []Candidate
 	if fopt.Follow {
 		var linked []string
-		refs, linked, refCandidates = followReferences(ctx, c, u, policy, fopt, platform == "gitbook")
+		refs, discovered, linked, refCandidates = followReferences(ctx, c, u, policy, string(body), fopt, platform == "gitbook")
 		for _, t := range linked {
 			policy += "\n\n" + t
 		}
@@ -192,6 +192,7 @@ func FetchWeb(ctx context.Context, c *netx.Client, raw string, options ...FetchO
 		Currency:     "USD",
 		Policy:       policy,
 		References:   refs,
+		Discovered:   discovered,
 		FetchedAt:    time.Now().UTC(),
 	}
 	if platform == "immunefi" && strings.Contains(policy, "Paused") {

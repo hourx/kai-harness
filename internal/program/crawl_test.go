@@ -20,6 +20,48 @@ func TestHeaderFalsePositiveFromGitBookImage(t *testing.T) {
 	}
 }
 
+func TestHrefDiscoveryFromJSLanding(t *testing.T) {
+	shellHTML := `<html><body><div id="root">Bug bounty</div>` +
+		`<a href="/bugbounty/i/cloud">Cloud</a>` +
+		`<a href="/bugbounty/i/report">Report</a>` +
+		`<a href="/bugbounty/i/llms.txt">llms</a>` +
+		`</body></html>`
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/bugbounty/i/cloud" {
+			w.Write([]byte("Cloud scope page with enough readable text to be fetched. " +
+				"Visit api.example.com for the testnet guide. Report to security@example.com."))
+			return
+		}
+		// A JS shell: readable text is short, but every doc link is in an href.
+		w.Write([]byte(shellHTML))
+	}))
+	defer srv.Close()
+
+	c := netx.New("test", 50, nil)
+	defer c.Close()
+	u, _ := url.Parse(srv.URL + "/bugbounty")
+	refs, discovered, texts, _ := followReferences(context.Background(), c, u,
+		"Bug bounty program", shellHTML,
+		FetchOptions{MaxLinks: 1}, false)
+
+	if len(discovered) < 2 {
+		t.Fatalf("discovered = %+v, want relative hrefs from the HTML shell", discovered)
+	}
+	seen := map[string]bool{}
+	for _, d := range discovered {
+		seen[d.URL] = true
+	}
+	if !seen[srv.URL+"/bugbounty/i/cloud"] || !seen[srv.URL+"/bugbounty/i/report"] {
+		t.Errorf("discovered missing relative links: %+v", discovered)
+	}
+	if seen[srv.URL+"/bugbounty/i/llms.txt"] {
+		t.Errorf("llms.txt must be filtered as an asset: %+v", discovered)
+	}
+	if len(refs) != 1 || len(texts) != 1 {
+		t.Errorf("refs=%+v texts=%d, want one fetched page", refs, len(texts))
+	}
+}
+
 func TestHostsFromReferencedPage(t *testing.T) {
 	text := "## Navigate to the testnet\nGo to [testnet.ticko.xyz](https://testnet.ticko.xyz/).\n" +
 		"Join Discord https://discord.com/invite/ticko and see https://1035376029-files.gitbook.io/x.png\n" +
@@ -62,10 +104,13 @@ func TestFollowReferencesSameDomainOnly(t *testing.T) {
 	defer c.Close()
 	u, _ := url.Parse(srv.URL)
 	policy := "GitBook main. [Testnet Guide](http://" + u.Host + "/testnet-guide) and [External](https://evil.test/steal)."
-	refs, texts, cands := followReferences(context.Background(), c, u, policy, FetchOptions{MaxLinks: 5}, true)
+	refs, discovered, texts, cands := followReferences(context.Background(), c, u, policy, "", FetchOptions{MaxLinks: 5}, true)
 
 	if len(refs) != 1 || !strings.Contains(refs[0].URL, "testnet-guide") {
 		t.Errorf("refs = %+v", refs)
+	}
+	if len(discovered) != 1 || !strings.Contains(discovered[0].URL, "testnet-guide") {
+		t.Errorf("discovered = %+v", discovered)
 	}
 	if len(texts) != 1 || !strings.Contains(texts[0], "testnet.ticko.xyz") {
 		t.Errorf("linked text = %v", texts)
