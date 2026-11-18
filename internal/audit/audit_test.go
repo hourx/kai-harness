@@ -48,3 +48,22 @@ func TestResultText(t *testing.T) {
 		}
 	}
 }
+
+func TestScopeRulesStripsInlineComments(t *testing.T) {
+	got := scopeRules([]string{
+		"# full-line comment stays out",
+		"yandex.com   # apex of *.yandex.com (MS)",
+		"*.yandex.ru # MS infra",
+		"",
+		"ya.ru",
+	})
+	want := []string{"yandex.com", "*.yandex.ru", "ya.ru"}
+	if len(got) != len(want) {
+		t.Fatalf("scopeRules = %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("scopeRules[%d] = %q, want %q", i, got[i], want[i])
+		}
+	}
+}

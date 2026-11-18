@@ -22,6 +22,21 @@ type Check struct {
 	Detail string
 }
 
+// scopeRules extracts bare rule tokens from scope.txt lines: blank lines are
+// skipped and inline comments (operator annotations, not rules) are stripped.
+func scopeRules(lines []string) []string {
+	out := []string{}
+	for _, l := range lines {
+		if i := strings.Index(l, "#"); i >= 0 {
+			l = l[:i]
+		}
+		if r := strings.TrimSpace(l); r != "" {
+			out = append(out, r)
+		}
+	}
+	return out
+}
+
 // Result is the full set of assertions.
 type Result struct {
 	Name   string
@@ -256,15 +271,13 @@ func runDir(root, name, source string) Result {
 		add("required headers mirrored", headersOK, strings.Join(b.RequiredHeaders, ", "))
 	}
 
-	scope := []string{}
-	for _, l := range lines("scope.txt") {
-		if !strings.HasPrefix(l, "#") {
-			scope = append(scope, l)
-		}
-	}
+	scope := scopeRules(lines("scope.txt"))
 	scopeOK := len(scope) > 0
 	for _, s := range scope {
-		if !strings.Contains(brief, s) || !strings.Contains(boundsDoc, "IN `"+s+"`") {
+		// Accept either boundaries format: the intake bullet "- IN `rule`"
+		// or the operator-approved table row "| `rule` | ...". Backtick
+		// anchoring keeps exact-token semantics (no `*.host` shadowing).
+		if !strings.Contains(brief, s) || !strings.Contains(boundsDoc, "`"+s+"`") {
 			scopeOK = false
 		}
 	}
