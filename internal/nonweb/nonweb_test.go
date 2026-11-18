@@ -101,6 +101,10 @@ func TestRiskScoreAndTopRisk(t *testing.T) {
 }
 
 func TestAnalyzeExpandsOrgURL(t *testing.T) {
+	// Empty KAI_HOME so the legacy BOUNTYKIT_HOME alias is deterministically
+	// used — otherwise an operator-exported KAI_HOME wins and this test
+	// writes into the real state root.
+	t.Setenv("KAI_HOME", "")
 	t.Setenv("BOUNTYKIT_HOME", t.TempDir())
 	p, err := workspace.Create("demo", workspace.Meta{})
 	if err != nil {

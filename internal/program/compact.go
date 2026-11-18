@@ -6,6 +6,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/hourx/kai/internal/scope"
 )
 
 // CompactBrief renders a context card small enough to inject into an agent
@@ -25,17 +27,29 @@ func CompactBrief(pDir string) (string, error) {
 	fmt.Fprintf(&out, "platform=%s confidence=%s verdict=%s (%d/100) money=%d crowding=%d\n",
 		in.Platform, in.confidenceLabel(), s.Verdict, s.Total, s.Money, s.Crowding)
 
+	// Operator-approved `scope.txt` is the source of truth for the gate; prefer
+	// it over intake-derived rules so the card matches `kai boundaries` and the
+	// gate. Prose-only programs often have no intake assets at all.
 	var rules []string
-	for _, a := range in.Assets {
-		if !a.Eligible {
-			continue
+	var outRules []string
+	if g, err := scope.LoadGate(pDir); err == nil {
+		rules = g.In
+		outRules = g.Out
+	} else {
+		for _, a := range in.Assets {
+			if !a.Eligible {
+				continue
+			}
+			if r, kind := normalizeRule(a); r != "" && kind != "non-web" && kind != "unparsed" {
+				rules = append(rules, r)
+			}
 		}
-		if r, kind := normalizeRule(a); r != "" && kind != "non-web" && kind != "unparsed" {
-			rules = append(rules, r)
-		}
+		rules = uniq(rules)
 	}
-	rules = uniq(rules)
 	fmt.Fprintf(&out, "scope(%d): %s\n", len(rules), strings.Join(rules, ", "))
+	if len(outRules) > 0 {
+		fmt.Fprintf(&out, "out(%d): %s\n", len(outRules), strings.Join(outRules, ", "))
+	}
 
 	bd := in.Boundaries
 	fmt.Fprintf(&out, "mainnet=%s env=%s\n", dash(bd.MainnetTesting), dash(bd.TestingEnvironment))
