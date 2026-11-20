@@ -350,6 +350,13 @@ v0.5:
 kai report <program>
 ```
 
+v0.16 (see README for the commands added between v0.6 and v0.15):
+
+```
+kai model  <program> [--json] [--write] [--archetype NAME] [--top N]
+kai evidence <program> import --har capture.har [--limit N] [--label name] [--keep-secrets]
+```
+
 ---
 
 ## 8. Hard rules

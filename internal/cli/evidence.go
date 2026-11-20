@@ -29,6 +29,7 @@ func cmdEvidence(args []string) int {
 	pos, rest := split(args, map[string]bool{
 		"kind": true, "host": true, "method": true, "path": true, "status": true,
 		"note": true, "target": true, "finding": true, "file": true,
+		"har": true, "limit": true, "label": true,
 	})
 	fs := flag.NewFlagSet("evidence", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
@@ -41,6 +42,10 @@ func cmdEvidence(args []string) int {
 	target := fs.String("target", "", "queue target this evidence belongs to")
 	finding := fs.String("finding", "", "findings/ledger.json id this evidence supports")
 	file := fs.String("file", "", "raw response/body to preserve")
+	harPath := fs.String("har", "", "import every usable entry of a HAR capture (evidence import)")
+	harLimit := fs.Int("limit", 0, "with --har: import at most N entries (0 = all)")
+	harLabel := fs.String("label", "", "with --har: name this capture in each item's note")
+	keepSecrets := fs.Bool("keep-secrets", false, "with --har: store credential header values instead of a length marker")
 	var headers kvFlag
 	fs.Var(&headers, "header", "response header line, repeatable")
 	if err := fs.Parse(rest); err != nil {
@@ -123,6 +128,34 @@ func cmdEvidence(args []string) int {
 		fmt.Print(evidence.Markdown([]evidence.Item{it}))
 		return 0
 
+	case "import":
+		if *harPath == "" {
+			return fail(errors.New("usage: kai evidence import <program> --har capture.har [--limit N] [--label name] [--keep-secrets]"))
+		}
+		blob, err := os.ReadFile(*harPath)
+		if err != nil {
+			return fail(err)
+		}
+		label := *harLabel
+		if label == "" {
+			label = filepath.Base(*harPath)
+		}
+		st, err := evidence.ImportHAR(p.Dir, blob, filepath.Base(*harPath), evidence.HAROptions{
+			Redact: !*keepSecrets,
+			Limit:  *harLimit,
+			Label:  label,
+		})
+		if err != nil {
+			return fail(err)
+		}
+		fmt.Print(evidence.MarkdownHAR(st, label))
+		if st.Added+st.Existing == 0 {
+			fmt.Fprintln(os.Stderr, "kai: the capture held no usable entry — nothing indexed")
+			return 1
+		}
+		fmt.Printf("\nindex: %s\n", evidence.IndexPath(p.Dir))
+		return 0
+
 	case "attach":
 		if id == "" || *finding == "" {
 			return fail(errors.New("usage: kai evidence <program> attach <id> --finding F"))
@@ -134,5 +167,5 @@ func cmdEvidence(args []string) int {
 		fmt.Printf("attached %s to finding %s\n", it.ID, it.Finding)
 		return 0
 	}
-	return fail(errors.New("usage: kai evidence <program> [list | add --kind K [...] | show <id> | attach <id> --finding F]"))
+	return fail(errors.New("usage: kai evidence <program> [list | add --kind K [...] | import --har f | show <id> | attach <id> --finding F]"))
 }

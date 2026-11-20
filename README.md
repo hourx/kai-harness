@@ -206,9 +206,11 @@ read it". None of them decides anything for you.
 ```
 kai plan acme                       # queue -> waves: what needs no session, what needs a login
 kai board                           # every program, ranked into today's list
+kai model acme                      # what kind of program this is: entities, anomalies, coverage, gaps
 kai evidence acme add --kind response --host api.example.com --method GET \
     --path /v1/orders/7 --status 200 --file raw.json --note "other tenant's order"
 kai evidence acme list              # ids, hashes, blobs
+kai evidence acme import --har capture.har   # one captured browser/proxy session -> bulk evidence
 kai report-draft acme 4f2a1c9b0e77 --platform hackerone --title "IDOR on /v1/orders/7"
 ```
 
@@ -228,6 +230,38 @@ kai report-draft acme 4f2a1c9b0e77 --platform hackerone --title "IDOR on /v1/ord
   OUT: the draft carries a warning banner instead.
 
 `kai` never sends a request while planning, never asserts scope on its own, and never submits.
+
+## The program model — what has not been touched
+
+`kai model <program>` derives a picture of the program from artifacts that are already
+on disk — recon, evidence, recorded outcomes, the contract — and prints it. It sends
+nothing and decides nothing:
+
+```
+kai model acme                 # verdict, entities, anomalies, coverage, gaps, then the untouched list
+kai model acme --json          # the whole thing, for another tool
+kai model acme --write         # state/model.json + state/model.md
+kai model acme --archetype graphql-api   # the operator's word beats any inference
+```
+
+- **Archetype.** A closed set — `api`, `graphql-api`, `web-app`, `mobile-api`, `chain`,
+  `mixed`, `unknown` — chosen from the surface map and the non-web assets. A declaration in
+  `state/program.yaml` (`"archetype": "graphql-api"`) wins and is labelled `declared`; an
+  inference is labelled `inferred` and always carries its signals, so a wrong guess is visible
+  rather than authoritative. Concatenated spellings (`GraphQLAPI`, `WebApp`) land on the same
+  canonical name.
+- **Coverage ledger.** Every in-scope asset, contract asset and module gets a row: `yes`,
+  `partial` or `no`, with the evidence reference and the last timestamp that touched it. The
+  list the command closes with is the honest to-do — assets with *nothing* recorded against
+  them, so work already started is never re-proposed as untouched.
+- **Gaps.** Questions the artifacts could not answer are printed as questions (missing
+  invariants, an empty capability matrix, no anomalies found), not filled in with plausible
+  guesses.
+- **Bulk evidence.** `kai evidence <program> import --har capture.har` turns one browser or
+  proxy session into evidence: each usable entry is hashed and indexed, re-importing the same
+  capture changes nothing, credential headers are stored as a length marker unless
+  `--keep-secrets` is passed, and an imported entry never claims a finding — that stays an
+  operator decision.
 
 ## Scope gate and exit codes
 
@@ -487,7 +521,7 @@ the release binary; it would not turn `kai` into a library. For now, use
 
 ## Status
 
-Current line: `kai 0.15.0`.
+Current line: `kai 0.16.0`.
 
 | Version | Contents |
 |---|---|
@@ -501,6 +535,7 @@ Current line: `kai 0.15.0`.
 | v0.13 | split-pane terminal workspace, read-only `kai serve` service face |
 | v0.14 | platform drivers as embedded data, `state/program.yaml` program contract, `kai drivers` / `kai contract --audit` |
 | v0.15 | live run stream: `GET /api/v1/programs/<n>/watch` (SSE over the recorded event log) and the dashboard's `watch live` panel |
+| v0.16 | program model (`kai model`), archetype verdict (`pkg/archetype`), coverage ledger + exploration rows, bulk HAR import into the evidence store |
 
 `kai` is a context preparer and an evidence bookkeeper, not a hunting agent. The full design
 lives in [`SPEC.md`](SPEC.md); the improvement roadmap in [`IMPROVEMENT-PLAN.md`](IMPROVEMENT-PLAN.md).
@@ -517,7 +552,8 @@ The deterministic core lives under `pkg/` and is importable:
 | `pkg/recon` | surface store (hosts, endpoints, bundles) |
 | `pkg/surface` | structure, ranking, outcomes |
 | `pkg/hypothesis` | queue → engagement plan |
-| `pkg/evidence` | hashed evidence capture |
+| `pkg/model`, `pkg/archetype` | program model (entities, anomalies, coverage, gaps) and the archetype verdict |
+| `pkg/evidence` | hashed evidence capture, incl. bulk HAR import |
 | `pkg/report` | platform field sets |
 | `pkg/outcome`, `pkg/triage`, `pkg/workspace` | ledgers and state |
 | `pkg/serve` | read-only HTTP/JSON face over the workspace |

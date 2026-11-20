@@ -64,13 +64,14 @@ Commands:
                                                              discover surface
   session <program> [show|set|clear] [--har f] [--cookie s] [--header 'K: V']
                                                              auth for recon
+  model   <program> [--json] [--write] [--archetype NAME]     what kind of program this is + the facts and gaps
   map     <program>                                          structure endpoints
   next    <program>                                          ranked test queue
   outcome <program> --status S [--class C] [--note T] <target...>
                                                              record what a target turned out to be
   plan    <program>                                          queue -> waves by what each step needs
   board   [<program>]                                        what is worth doing today (all programs)
-  evidence <program> [list|add|show|attach]                  capture the raw proof behind a finding
+  evidence <program> [list|add|import|show|attach] [--har f]  capture the raw proof behind a finding
   report-draft <program> <evidence-id> [--platform P]        draft a submission in the platform's fields
   diff    <program>                                          show last surface diff
   pack    <program> [-o dist] [--include-raw] [--include-session]
@@ -145,6 +146,8 @@ func Run(args []string) int {
 		return cmdRecon(args[1:])
 	case "session":
 		return cmdSession(args[1:])
+	case "model":
+		return cmdModel(args[1:])
 	case "map":
 		return cmdMap(args[1:])
 	case "next":

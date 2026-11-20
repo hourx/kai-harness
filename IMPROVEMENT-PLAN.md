@@ -201,10 +201,11 @@ the pack against the declared schema; the bb-* skills read the manifest instead 
 3. `pkg/` promotion (§10) — a library nobody can import is not a product.
 4. Sprint 2, then Sprint 3, then Sprint 4.
 5. Platform drivers + `state/program.yaml` (§11): HackerOne → Bugcrowd → self-hosted (security.txt).
-6. `model.json` + the five sweeps (§9), spiked on one real program before it generalises.
+6. `model.json` + the five sweeps (§9), spiked on one real program before it generalises. **Done**
+   — spiked on `yandex` (11 entities, 14.3k actions, 59 anomalies) and on a live HAR capture.
 7. Coverage ledger + exploration rows derived from that model (§9.1, §15.1–15.2) — the two rows that
-   make "what was never touched" and "what was tried, and why" answerable with no database.
-8. HAR import: a captured browser or proxy session becomes evidence in bulk (§15.5).
+   make "what was never touched" and "what was tried, and why" answerable with no database. **Done**.
+8. HAR import: a captured browser or proxy session becomes evidence in bulk (§15.5). **Done**.
 9. Pattern library, two layers (§9.3) + external adapter seam (§12).
 10. Shadow lesson loop (§15.4) — proposals only; adoption is one explicit operator action, rollback is
     a pointer change.
@@ -552,7 +553,13 @@ functions and no external deps.
 | §14 split-pane workspace (bare `kai`, `kai tui`, `kai tui --demo`) | done (`pkg/progress`, `internal/cli/{canvas,tui}.go`) |
 | §10 step 2: `kai serve` (HTTP/JSON API) | done (`pkg/serve` — read-only HTTP/JSON, bearer-gated, one-file dashboard) |
 | §11 program contract | done (`state/program.yaml` via `pkg/program/contract.go`, `kai contract [--audit]`) |
-| §10 step 4-5: driver manifests, model/archetypes | drivers done (`pkg/driver` — embedded manifests, registry seam, `kai drivers`); program archetypes planned |
+| §10 step 4-5: driver manifests, model/archetypes | done — `pkg/driver` (embedded manifests, registry seam, `kai drivers`), `pkg/archetype` (closed set, declared-or-inferred, `kai model --archetype`) |
+| §9.1 program model (`state/model.json` + `model.md`, `kai model`) | done — `pkg/model` |
+| §9.1/§15.1–15.2 coverage ledger + exploration rows | done — coverage rows (`yes`/`partial`/`no`) fed by evidence and outcomes, closed by the "not touched" list |
+| §15.5 HAR import into the evidence store | done — `kai evidence import --har <file>` (hash-verified blobs, idempotent, credential headers redacted by default) |
+| §15.3 evidence pairing check, invariant testing | planned (invariant statements are operator input; the sweep stays empty until they exist) |
+| §15.4 shadow lesson loop (propose, never apply) | planned |
+| §15.5 §9.3 pattern library, two layers + external adapter seam | planned |
 | §10 step 6: LLM planner seam | planned, last on purpose |
 
 Deviations from the original text, recorded so the plan stays honest:
@@ -583,14 +590,16 @@ Deviations from the original text, recorded so the plan stays honest:
 Direction: the CLI is the product. `kai serve` is a read-only side face over the same state, not a
 workstream of its own, and nothing here is mobile-first.
 
-1. Program archetypes on top of the driver manifests (HackerOne/Bugcrowd/self-hosted/Cantina shapes),
-   and a reader for platforms whose policy is not plain HTML (Bugcrowd's API, an authenticated
-   session) — the driver seam already names the reader, so this is registration, not core change.
-2. Program model on top of the surface store, then the coverage ledger and exploration rows (§9.1,
-   §15.1–15.2), then the evidence pairing check (§15.3), then invariant testing.
-3. HAR import into the evidence store (§15.5) — one captured session, bulk evidence.
-4. Shadow lesson loop (§15.4): propose, never apply.
-5. LLM planner seam — proposes into `plan.json`, never executes.
+1. ~~Program archetypes on top of the driver manifests~~ — done (`pkg/archetype`). Still open: a
+   reader for platforms whose policy is not plain HTML (Bugcrowd's API, an authenticated session);
+   the driver seam already names the reader, so this is registration, not core change.
+2. ~~Program model on top of the surface store, then the coverage ledger and exploration rows~~
+   (§9.1, §15.1–15.2) — done (`pkg/model`, `kai model`). Still open: the evidence pairing check
+   (§15.3), then invariant testing once an operator has written statements worth falsifying.
+3. ~~HAR import into the evidence store~~ (§15.5) — done (`kai evidence import --har`).
+4. Pattern library, two layers (§9.3) + the external adapter seam (§12).
+5. Shadow lesson loop (§15.4): propose, never apply.
+6. LLM planner seam — proposes into `plan.json`, never executes.
 
 **Deferred, not next:** a mobile-friendly card layout for the dashboard. The live stream that landed
 in v0.15.0 is already usable from any HTTP client, so a phone layout buys nothing while the CLI is
