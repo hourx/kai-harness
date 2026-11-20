@@ -44,14 +44,14 @@ Masalah yang dijawab:
 ### Opsi 1 — Go terpasang
 
 ```bash
-go install github.com/hourx/kai/cmd/kai@latest
+go install github.com/hourx/kai-harness/cmd/kai@latest
 kai version
 ```
 
 ### Opsi 2 — dari source
 
 ```bash
-git clone https://github.com/hourx/kai.git
+git clone https://github.com/hourx/kai-harness.git
 cd kai
 go build -o bin/kai ./cmd/kai
 go test ./...
@@ -294,10 +294,10 @@ Hal-hal yang nyata ditemukan saat membangun dan menguji kai:
 
 Belum. `npx` adalah runner paket **npm/Node.js**, sedangkan kai adalah biner
 **Go**. Supaya `npx kai` jalan, perlu paket pembungkus kecil (mis.
-`@hourx/kai`) yang mengunduh biner dari GitHub Releases. Itu bisa dibuat
+`@hourx/kai-harness`) yang mengunduh biner dari GitHub Releases. Itu bisa dibuat
 belakangan — bukan mengubah kai jadi library.
 
-Sekarang: `go install github.com/hourx/kai/cmd/kai@latest`.
+Sekarang: `go install github.com/hourx/kai-harness/cmd/kai@latest`.
 
 ---
 

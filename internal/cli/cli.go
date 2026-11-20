@@ -14,20 +14,21 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hourx/kai/internal/audit"
-	"github.com/hourx/kai/internal/backup"
-	"github.com/hourx/kai/internal/doctor"
-	"github.com/hourx/kai/internal/netx"
-	"github.com/hourx/kai/internal/nonweb"
-	"github.com/hourx/kai/internal/pack"
-	"github.com/hourx/kai/internal/program"
-	"github.com/hourx/kai/internal/recon"
-	"github.com/hourx/kai/internal/scope"
-	"github.com/hourx/kai/internal/session"
-	"github.com/hourx/kai/internal/surface"
-	"github.com/hourx/kai/internal/triage"
-	"github.com/hourx/kai/internal/version"
-	"github.com/hourx/kai/internal/workspace"
+	"github.com/hourx/kai-harness/internal/audit"
+	"github.com/hourx/kai-harness/internal/backup"
+	"github.com/hourx/kai-harness/internal/doctor"
+	"github.com/hourx/kai-harness/internal/netx"
+	"github.com/hourx/kai-harness/internal/nonweb"
+	"github.com/hourx/kai-harness/internal/outcome"
+	"github.com/hourx/kai-harness/internal/pack"
+	"github.com/hourx/kai-harness/internal/program"
+	"github.com/hourx/kai-harness/internal/recon"
+	"github.com/hourx/kai-harness/internal/scope"
+	"github.com/hourx/kai-harness/internal/session"
+	"github.com/hourx/kai-harness/internal/surface"
+	"github.com/hourx/kai-harness/internal/triage"
+	"github.com/hourx/kai-harness/internal/version"
+	"github.com/hourx/kai-harness/internal/workspace"
 )
 
 const usageText = `kai — deterministic context packs for bug bounty
@@ -61,6 +62,8 @@ Commands:
                                                              auth for recon
   map     <program>                                          structure endpoints
   next    <program>                                          ranked test queue
+  outcome <program> --status S [--class C] [--note T] <target...>
+                                                             record what a target turned out to be
   diff    <program>                                          show last surface diff
   pack    <program> [-o dist] [--include-raw] [--include-session]
                                                              build handoff ZIP
@@ -123,6 +126,8 @@ func Run(args []string) int {
 		return cmdMap(args[1:])
 	case "next":
 		return cmdNext(args[1:])
+	case "outcome":
+		return cmdOutcome(args[1:])
 	case "diff":
 		return cmdDiff(args[1:])
 	case "pack":
@@ -916,6 +921,16 @@ func buildSurface(p *workspace.Program) (*surface.Plan, error) {
 	plan := surface.BuildPlan(p.Name, m, endpoints, d, store.Hosts, now)
 	surface.AddNonWeb(plan, nonWeb, constraints)
 	surface.ApplyConstraints(plan, constraints)
+	// Ranking feedback (T1.2): the recorded outcomes decide which of these
+	// targets is still worth a slot. Deterministic — same log, same surface,
+	// same plan, so a diff between runs means the surface or the history moved.
+	tbl, err := outcome.Load(p.Dir)
+	if err != nil {
+		return nil, err
+	}
+	if dropped := surface.ApplyOutcomes(plan, tbl, outcome.SurfaceTS(p.Dir)); dropped > 0 {
+		fmt.Fprintf(os.Stderr, "outcomes: %d target(s) already classified — dropped from the queue\n", dropped)
+	}
 	if err := os.WriteFile(filepath.Join(p.Dir, "next.md"), []byte(plan.Markdown()), 0o600); err != nil {
 		return nil, err
 	}
@@ -1026,13 +1041,6 @@ func enrichNonWeb(p *workspace.Program, out []surface.NonWebAsset) {
 			a.Boost += 5
 		}
 	}
-}
-
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
 }
 
 func writeJSON(path string, v any) error {

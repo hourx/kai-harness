@@ -7,7 +7,7 @@ package main
 import (
 	"os"
 
-	"github.com/hourx/kai/internal/cli"
+	"github.com/hourx/kai-harness/internal/cli"
 )
 
 func main() {

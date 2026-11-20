@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"sort"
 	"time"
+
+	"github.com/hourx/kai-harness/internal/strutil"
 )
 
 // TLSInfo is the certificate data recorded for a host.
@@ -185,22 +187,13 @@ func (s *Store) SortedJS() []string {
 	return out
 }
 
-// Uniq merges values into a sorted, de-duplicated slice.
+// Uniq merges values into a sorted, de-duplicated slice. The historical name is
+// kept because callers rely on the sort (stable output depends on it); the
+// implementation lives in strutil so there is one dedupe semantics in the tree.
 func Uniq(values ...[]string) []string {
-	seen := map[string]struct{}{}
-	var out []string
+	var all []string
 	for _, group := range values {
-		for _, v := range group {
-			if v == "" {
-				continue
-			}
-			if _, ok := seen[v]; ok {
-				continue
-			}
-			seen[v] = struct{}{}
-			out = append(out, v)
-		}
+		all = append(all, group...)
 	}
-	sort.Strings(out)
-	return out
+	return strutil.UniqueSorted(all)
 }

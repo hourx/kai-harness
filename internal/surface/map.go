@@ -9,6 +9,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/hourx/kai-harness/internal/strutil"
 )
 
 // NonWebAsset is an in-scope target that has no host-level scope rule: a repo,
@@ -155,23 +157,10 @@ func BuildWithNonWeb(program string, endpoints map[string][]string, nonWeb []Non
 }
 
 // UniqLoose returns the loose parameters without duplicates, sorted.
-func UniqLoose(values []string) []string {
-	seen := map[string]struct{}{}
-	out := make([]string, 0, len(values))
-	for _, v := range values {
-		if v == "" {
-			continue
-		}
-		if _, ok := seen[v]; ok {
-			continue
-		}
-		seen[v] = struct{}{}
-		out = append(out, v)
-	}
-	sort.Strings(out)
-	return out
-}
-
+// UniqLoose merges the slices, drops blanks and duplicates, and sorts the
+// result. The package-facing name is kept; the implementation lives in strutil
+// so there is exactly one dedupe semantics in the tree.
+func UniqLoose(in []string) []string { return strutil.UniqueSorted(in) }
 func keys(set map[string]struct{}) []string {
 	out := make([]string, 0, len(set))
 	for k := range set {

@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hourx/kai/internal/recon"
+	"github.com/hourx/kai-harness/internal/recon"
 )
 
 func TestModuleAndClass(t *testing.T) {

@@ -10,8 +10,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/hourx/kai/internal/program"
-	"github.com/hourx/kai/internal/workspace"
+	"github.com/hourx/kai-harness/internal/program"
+	"github.com/hourx/kai-harness/internal/workspace"
 )
 
 func safeSlug(s string) string {
@@ -123,7 +123,11 @@ func cmdExport(args []string) int {
 	// Per-page scope and the AI-agent rulebook come from the last intake.
 	var in program.Intake
 	if raw, err := os.ReadFile(filepath.Join(p.Dir, "intake.json")); err == nil {
-		_ = json.Unmarshal(raw, &in)
+		// A corrupt intake.json used to be ignored, which silently exported an
+		// incomplete pack (no per-page scope). Fail loudly instead.
+		if err := json.Unmarshal(raw, &in); err != nil {
+			return fail(fmt.Errorf("intake.json: %w", err))
+		}
 	}
 	if len(in.Pages) > 0 {
 		pagesDir := filepath.Join(*to, "pages")

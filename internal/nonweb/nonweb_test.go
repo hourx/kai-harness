@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/hourx/kai/internal/workspace"
+	"github.com/hourx/kai-harness/internal/workspace"
 )
 
 func TestListOrgReposAndFilter(t *testing.T) {

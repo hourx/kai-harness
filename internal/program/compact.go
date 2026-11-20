@@ -7,7 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/hourx/kai/internal/scope"
+	"github.com/hourx/kai-harness/internal/scope"
+	"github.com/hourx/kai-harness/internal/strutil"
 )
 
 // CompactBrief renders a context card small enough to inject into an agent
@@ -44,7 +45,7 @@ func CompactBrief(pDir string) (string, error) {
 				rules = append(rules, r)
 			}
 		}
-		rules = uniq(rules)
+		rules = strutil.Unique(rules)
 	}
 	fmt.Fprintf(&out, "scope(%d): %s\n", len(rules), strings.Join(rules, ", "))
 	if len(outRules) > 0 {
@@ -52,7 +53,7 @@ func CompactBrief(pDir string) (string, error) {
 	}
 
 	bd := in.Boundaries
-	fmt.Fprintf(&out, "mainnet=%s env=%s\n", dash(bd.MainnetTesting), dash(bd.TestingEnvironment))
+	fmt.Fprintf(&out, "mainnet=%s env=%s\n", strutil.Dash(bd.MainnetTesting), strutil.Dash(bd.TestingEnvironment))
 	if bd.SubmissionChannel != "" {
 		fmt.Fprintf(&out, "submit=%s\n", bd.SubmissionChannel)
 	}

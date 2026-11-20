@@ -18,9 +18,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hourx/kai/internal/netx"
-	"github.com/hourx/kai/internal/program"
-	"github.com/hourx/kai/internal/workspace"
+	"github.com/hourx/kai-harness/internal/netx"
+	"github.com/hourx/kai-harness/internal/program"
+	"github.com/hourx/kai-harness/internal/strutil"
+	"github.com/hourx/kai-harness/internal/workspace"
 )
 
 // Workflow is one CI workflow file and the risky patterns found in it.
@@ -94,7 +95,8 @@ type ghRepo struct {
 // It deliberately uses a client without any session: the GitHub API never
 // receives target cookies.
 func listOrgRepos(ctx context.Context, org string) ([]ghRepo, string) {
-	c := netx.New("kai-nonweb/0.9", 5, nil)
+	// Strict TLS: api.github.com is not the target under test.
+	c := netx.NewStrict("kai-nonweb/0.9", 5, nil)
 	defer c.Close()
 
 	var out []ghRepo
@@ -126,7 +128,7 @@ func listOrgRepos(ctx context.Context, org string) ([]ghRepo, string) {
 
 // usableRepos drops archived and forked repos: most bounty policies exclude
 // them unless a direct impact on the company's own assets is demonstrated.
-func usableRepos(repos []ghRepo, max int) ([]ghRepo, int) {
+func usableRepos(repos []ghRepo, limit int) ([]ghRepo, int) {
 	var out []ghRepo
 	skipped := 0
 	for _, r := range repos {
@@ -135,7 +137,7 @@ func usableRepos(repos []ghRepo, max int) ([]ghRepo, int) {
 			continue
 		}
 		out = append(out, r)
-		if len(out) >= max {
+		if len(out) >= limit {
 			break
 		}
 	}
@@ -261,13 +263,6 @@ func Analyze(ctx context.Context, p *workspace.Program, opts Options) (Report, e
 	return rep, nil
 }
 
-func max(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
-}
-
 func analyzeRepo(ctx context.Context, p *workspace.Program, u string, opts Options, logf func(format string, args ...any)) Repo {
 	r := Repo{URL: u, Status: "not-cloned"}
 	m := slugRE.FindStringSubmatch(u)
@@ -353,6 +348,9 @@ func scanRepo(r *Repo, logf func(format string, args ...any)) {
 			text := string(b)
 			if len(text) > 200_000 {
 				text = text[:200_000]
+				// A truncated scan must say so: silently reporting "no findings"
+				// for a workflow that was never fully read is worse than silence.
+				w.Risks = append(w.Risks, fmt.Sprintf("%s truncated at 200000 chars — scan incomplete", w.File))
 			}
 			for _, m := range onRE.FindAllStringSubmatch(text, -1) {
 				if m[1] != "" {
@@ -378,8 +376,8 @@ func scanRepo(r *Repo, logf func(format string, args ...any)) {
 			if curlBashRE.MatchString(text) {
 				w.Risks = append(w.Risks, "remote script piped into a shell")
 			}
-			w.Triggers = uniqueStrings(w.Triggers)
-			w.Risks = uniqueStrings(w.Risks)
+			w.Triggers = strutil.Unique(w.Triggers)
+			w.Risks = strutil.Unique(w.Risks)
 			r.Workflows = append(r.Workflows, w)
 			r.Risks = append(r.Risks, w.Risks...)
 		}
@@ -417,7 +415,7 @@ func scanRepo(r *Repo, logf func(format string, args ...any)) {
 	}
 	sort.Strings(r.Manifests)
 	sort.Strings(r.EntryPoints)
-	r.Risks = uniqueStrings(r.Risks)
+	r.Risks = strutil.Unique(r.Risks)
 	logf("  scanned %s: %d workflow(s), %d manifest(s)", r.Slug, len(r.Workflows), len(r.Manifests))
 }
 
@@ -461,19 +459,6 @@ func TopRisk(risks []string) string {
 		return risks[0]
 	}
 	return ""
-}
-
-func uniqueStrings(in []string) []string {
-	seen := map[string]bool{}
-	out := make([]string, 0, len(in))
-	for _, v := range in {
-		if v == "" || seen[v] {
-			continue
-		}
-		seen[v] = true
-		out = append(out, v)
-	}
-	return out
 }
 
 // Save writes nonweb.json and nonweb.md into the program directory.

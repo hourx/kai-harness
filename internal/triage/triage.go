@@ -11,6 +11,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/hourx/kai-harness/internal/strutil"
 )
 
 type Finding struct {
@@ -74,8 +76,15 @@ func (l *Ledger) Save(pDir string) error {
 	if err := os.WriteFile(Path(pDir), b, 0o600); err != nil {
 		return err
 	}
-	_ = os.WriteFile(filepath.Join(dir, "lessons.md"), []byte(l.LessonsMarkdown()), 0o600)
-	_ = os.WriteFile(filepath.Join(dir, "dupes.md"), []byte(l.DupesMarkdown()), 0o600)
+	// lessons.md and dupes.md are what the operator reads before the next
+	// submission: a silent write failure here would look exactly like "nothing
+	// learned yet", so surface it.
+	if err := os.WriteFile(filepath.Join(dir, "lessons.md"), []byte(l.LessonsMarkdown()), 0o600); err != nil {
+		return fmt.Errorf("lessons.md: %w", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "dupes.md"), []byte(l.DupesMarkdown()), 0o600); err != nil {
+		return fmt.Errorf("dupes.md: %w", err)
+	}
 	return nil
 }
 
@@ -167,7 +176,7 @@ func (l Ledger) Markdown() string {
 	}
 	b.WriteString("| id | status | target | note |\n| --- | --- | --- | --- |\n")
 	for _, f := range l.Findings {
-		fmt.Fprintf(&b, "| %s | %s | `%s` | %s |\n", f.ID, f.Status, f.Target, dash(f.Note))
+		fmt.Fprintf(&b, "| %s | %s | `%s` | %s |\n", f.ID, f.Status, f.Target, strutil.Dash(f.Note))
 	}
 	b.WriteString("\n")
 	if len(l.Dupes) > 0 {
@@ -212,13 +221,6 @@ func (l Ledger) DupesMarkdown() string {
 }
 
 func now() string { return time.Now().UTC().Format(time.RFC3339) }
-
-func dash(s string) string {
-	if strings.TrimSpace(s) == "" {
-		return "—"
-	}
-	return s
-}
 
 // SortedStatuses is handy for briefs.
 func SortedStatuses(m map[string]int) []string {

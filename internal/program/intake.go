@@ -12,6 +12,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/hourx/kai-harness/internal/strutil"
 )
 
 // Asset is one entry from a platform's structured scope.
@@ -161,8 +163,8 @@ func (in *Intake) Scope() Scope {
 			s.Out = append(s.Out, rule)
 		}
 	}
-	s.In = uniq(s.In)
-	s.Out = uniq(s.Out)
+	s.In = strutil.Unique(s.In)
+	s.Out = strutil.Unique(s.Out)
 	sort.Strings(s.In)
 	sort.Strings(s.Out)
 	if in.TrustScope {
@@ -176,7 +178,7 @@ func (in *Intake) Scope() Scope {
 			}
 			s.In = append(s.In, rule)
 		}
-		s.In = uniq(s.In)
+		s.In = strutil.Unique(s.In)
 		sort.Strings(s.In)
 	}
 	return s
@@ -247,19 +249,6 @@ func splitHost(raw string) (string, string) {
 		path = ""
 	}
 	return raw, path
-}
-
-func uniq(in []string) []string {
-	seen := map[string]struct{}{}
-	out := make([]string, 0, len(in))
-	for _, v := range in {
-		if _, ok := seen[v]; ok {
-			continue
-		}
-		seen[v] = struct{}{}
-		out = append(out, v)
-	}
-	return out
 }
 
 // Score produces the Phase 0 recommendation.
@@ -450,7 +439,7 @@ func (in *Intake) Markdown() string {
 		s.Money, s.Crowding, s.Speed, s.Surface)
 	fmt.Fprintf(&b, "%s\n\n", in.URL)
 	fmt.Fprintf(&b, "Fetched %s · confidence `%s` · state `%s` · submission `%s` · website %s\n\n",
-		in.FetchedAt.Format(time.RFC3339), in.confidenceLabel(), in.State, in.Submission, dash(in.Website))
+		in.FetchedAt.Format(time.RFC3339), in.confidenceLabel(), in.State, in.Submission, strutil.Dash(in.Website))
 
 	b.WriteString("## Why this score\n\n")
 	for _, r := range s.Reasons {
@@ -462,7 +451,7 @@ func (in *Intake) Markdown() string {
 	if bd := in.Boundaries; bd.MainnetTesting != "" {
 		fmt.Fprintf(&b, "| Rule | Value |\n| --- | --- |\n")
 		fmt.Fprintf(&b, "| Mainnet / live testing | **%s** |\n", bd.MainnetTesting)
-		fmt.Fprintf(&b, "| Expected environment | %s |\n", dash(bd.TestingEnvironment))
+		fmt.Fprintf(&b, "| Expected environment | %s |\n", strutil.Dash(bd.TestingEnvironment))
 		fmt.Fprintf(&b, "| PoC | %s |\n", yesNotStated(bd.PoCRequired))
 		fmt.Fprintf(&b, "| KYC | %s |\n", yesNotStated(bd.KYCRequired))
 		if bd.SubmissionChannel != "" {
@@ -498,7 +487,7 @@ func (in *Intake) Markdown() string {
 		if simple {
 			b.WriteString("| severity | max |\n| --- | ---: |\n")
 			for _, row := range in.BountyRows {
-				fmt.Fprintf(&b, "| %s | %s |\n", dash(row.Name), money(row.Low))
+				fmt.Fprintf(&b, "| %s | %s |\n", strutil.Dash(row.Name), money(row.Low))
 			}
 		} else {
 			fmt.Fprintf(&b, "| | low | medium | high | critical |\n| --- | ---: | ---: | ---: | ---: |\n")
@@ -506,10 +495,10 @@ func (in *Intake) Markdown() string {
 				fmt.Fprintf(&b, "| reward | %s | %s | %s | %s |\n", money(in.AverageLower), money(in.AverageLower), money(in.AverageUpper), money(in.TopUpper))
 			} else {
 				for _, row := range in.BountyRows {
-					fmt.Fprintf(&b, "| %s | %s | %s | %s | %s |\n", dash(row.Name),
+					fmt.Fprintf(&b, "| %s | %s | %s | %s | %s |\n", strutil.Dash(row.Name),
 						money(row.Low), money(row.Medium), money(row.High), money(row.Critical))
 					if row.Minimums != [4]int{} {
-						fmt.Fprintf(&b, "| %s min | %s | %s | %s | %s |\n", dash(row.Name),
+						fmt.Fprintf(&b, "| %s min | %s | %s | %s | %s |\n", strutil.Dash(row.Name),
 							money(row.Minimums[0]), money(row.Minimums[1]), money(row.Minimums[2]), money(row.Minimums[3]))
 					}
 				}
@@ -586,7 +575,7 @@ func (in *Intake) Markdown() string {
 		b.WriteString("SYSTEM entries are named systems from an impact-based scope, **not hostnames**. ")
 		b.WriteString("Only real hosts are promoted by `--trust-scope`; system names become hints in `next`.\n\n")
 		for _, c := range in.Candidates {
-			fmt.Fprintf(&b, "- `%s` (%s, section: %s)\n", c.Identifier, c.Type, dash(c.Section))
+			fmt.Fprintf(&b, "- `%s` (%s, section: %s)\n", c.Identifier, c.Type, strutil.Dash(c.Section))
 		}
 		b.WriteString("\n")
 	}
@@ -601,7 +590,7 @@ func (in *Intake) Markdown() string {
 	if len(in.Discovered) > 0 {
 		b.WriteString("## Documentation discovered (linked from the main page)\n\n")
 		for _, r := range in.Discovered {
-			fmt.Fprintf(&b, "- `%s` — %s (%s)\n", r.URL, dash(r.Title), r.Status)
+			fmt.Fprintf(&b, "- `%s` — %s (%s)\n", r.URL, strutil.Dash(r.Title), r.Status)
 		}
 		b.WriteString("\nThese links were found in the page HTML, including JavaScript-rendered ")
 		b.WriteString("landing pages. Only those listed under 'Documentation read' were fetched.\n\n")
@@ -610,7 +599,7 @@ func (in *Intake) Markdown() string {
 	if len(in.LLMs) > 0 {
 		b.WriteString("## AI-agent rules (llms.txt)\n\n")
 		for _, r := range in.LLMs {
-			fmt.Fprintf(&b, "- `%s` — %s (%s)\n", r.URL, dash(r.Title), r.Status)
+			fmt.Fprintf(&b, "- `%s` — %s (%s)\n", r.URL, strutil.Dash(r.Title), r.Status)
 		}
 		b.WriteString("\nThese rules are mandatory for automated research and are exported as context/llms.md.\n\n")
 	}
@@ -621,7 +610,7 @@ func (in *Intake) Markdown() string {
 	if len(in.References) > 0 {
 		b.WriteString("## Documentation read (linked from the main page)\n\n")
 		for _, r := range in.References {
-			fmt.Fprintf(&b, "- `%s` — %s (%s)\n", r.URL, dash(r.Title), r.Status)
+			fmt.Fprintf(&b, "- `%s` — %s (%s)\n", r.URL, strutil.Dash(r.Title), r.Status)
 		}
 		b.WriteString("\nThese pages are folded into the policy text and the rules above.\n\n")
 	}
@@ -645,11 +634,4 @@ func bountyMark(a Asset) string {
 		return " — bounty eligible"
 	}
 	return ""
-}
-
-func dash(s string) string {
-	if s == "" {
-		return "—"
-	}
-	return s
 }

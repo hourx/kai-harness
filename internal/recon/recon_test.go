@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hourx/kai/internal/netx"
+	"github.com/hourx/kai-harness/internal/netx"
 )
 
 func TestNormalizePath(t *testing.T) {

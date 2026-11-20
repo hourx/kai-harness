@@ -11,10 +11,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hourx/kai/internal/netx"
-	"github.com/hourx/kai/internal/recon"
-	"github.com/hourx/kai/internal/session"
-	"github.com/hourx/kai/internal/workspace"
+	"github.com/hourx/kai-harness/internal/netx"
+	"github.com/hourx/kai-harness/internal/recon"
+	"github.com/hourx/kai-harness/internal/session"
+	"github.com/hourx/kai-harness/internal/workspace"
 )
 
 // Item is one environment check.
@@ -121,7 +121,8 @@ func Run(ctx context.Context, opts Options) Report {
 	}
 
 	if opts.Net {
-		c := netx.New("kai-doctor/0.9", 5, nil)
+		// hackerone.com is a third-party service, not the target: verify TLS.
+		c := netx.NewStrict("kai-doctor/0.9", 5, nil)
 		defer c.Close()
 		ctx2, cancel := context.WithTimeout(ctx, 8*time.Second)
 		defer cancel()

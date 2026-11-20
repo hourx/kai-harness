@@ -16,8 +16,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hourx/kai/internal/version"
-	"github.com/hourx/kai/internal/workspace"
+	"github.com/hourx/kai-harness/internal/strutil"
+	"github.com/hourx/kai-harness/internal/version"
+	"github.com/hourx/kai-harness/internal/workspace"
 )
 
 // Artifacts are the recon files bugbounty-pipeline already knows how to read.
@@ -75,11 +76,16 @@ func Build(p *workspace.Program, opts Options) (Result, error) {
 	now := time.Now().UTC()
 	zipPath := filepath.Join(outDir, fmt.Sprintf("%s_%s.zip", p.Name, now.Format("20060102T150405Z")))
 
-	f, err := os.Create(zipPath)
+	// 0600: the archive carries scope, session cookies and PoC transcripts.
+	f, err := os.OpenFile(zipPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
 	if err != nil {
 		return Result{}, err
 	}
 	defer f.Close()
+	// A pre-existing file keeps its old mode under O_CREATE, so set it explicitly.
+	if err := os.Chmod(zipPath, 0o600); err != nil {
+		return Result{}, err
+	}
 
 	zw := zip.NewWriter(f)
 	root := p.Name + "/"
@@ -181,6 +187,7 @@ func Build(p *workspace.Program, opts Options) (Result, error) {
 			if err := add("bountykit/session.json", b); err != nil {
 				return Result{}, err
 			}
+			fmt.Fprintf(os.Stderr, "warning: %s includes session.json (live cookies/headers) — share this archive only with the program\n", filepath.Base(zipPath))
 		}
 	}
 
@@ -379,7 +386,7 @@ func brief(p *workspace.Program, now time.Time, opts Options) string {
 
 	if bd := pi.Boundaries; bd.MainnetTesting != "" {
 		b.WriteString("## Boundaries (read first)\n\n")
-		fmt.Fprintf(&b, "- mainnet/live testing: **%s** (environment: %s)\n", bd.MainnetTesting, dash(bd.TestingEnvironment))
+		fmt.Fprintf(&b, "- mainnet/live testing: **%s** (environment: %s)\n", bd.MainnetTesting, strutil.Dash(bd.TestingEnvironment))
 		fmt.Fprintf(&b, "- PoC: %s · KYC: %s · deposit: %s\n", yesNo(pi.Boundaries.PoCRequired), yesNo(pi.Boundaries.KYCRequired), yesNo(pi.Boundaries.DepositRequired))
 		if len(bd.RequiredHeaders) > 0 {
 			fmt.Fprintf(&b, "- required headers: `%s`\n", strings.Join(bd.RequiredHeaders, "`, `"))
@@ -540,13 +547,6 @@ func yesNo(v bool) string {
 		return "yes"
 	}
 	return "not stated"
-}
-
-func dash(s string) string {
-	if s == "" {
-		return "—"
-	}
-	return s
 }
 
 func readOr(p *workspace.Program, name string) string {

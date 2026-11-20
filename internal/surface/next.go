@@ -6,7 +6,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hourx/kai/internal/recon"
+	"github.com/hourx/kai-harness/internal/recon"
+	"github.com/hourx/kai-harness/internal/strutil"
 )
 
 // Hypothesis is one ranked thing to test, with the evidence that put it there.
@@ -263,19 +264,7 @@ func tagsFor(class, target string) []string {
 		strings.Contains(low, "session") || strings.Contains(low, "login") {
 		out = append(out, "auth-required")
 	}
-	return uniqTags(out)
-}
-
-func uniqTags(in []string) []string {
-	seen := map[string]bool{}
-	out := []string{}
-	for _, s := range in {
-		if s != "" && !seen[s] {
-			seen[s] = true
-			out = append(out, s)
-		}
-	}
-	return out
+	return strutil.Unique(out)
 }
 
 // clusterKey normalises an endpoint into its object root so ten endpoints

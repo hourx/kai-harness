@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/hourx/kai/internal/workspace"
+	"github.com/hourx/kai-harness/internal/workspace"
 )
 
 func TestBuildKeepsBountykitContractDir(t *testing.T) {

@@ -9,7 +9,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/hourx/kai/internal/netx"
+	"github.com/hourx/kai-harness/internal/netx"
 )
 
 // FetchOptions controls how much of a program's documentation is read.

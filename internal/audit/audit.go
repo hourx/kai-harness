@@ -304,22 +304,25 @@ func runDir(root, name, source string) Result {
 		if len(plan.Items) < limit {
 			limit = len(plan.Items)
 		}
-		missing := []string{}
+		missingBrief := []string{}
 		for _, it := range plan.Items[:limit] {
 			if !strings.Contains(brief, it.Target) {
-				missing = append(missing, it.Target)
+				missingBrief = append(missingBrief, it.Target)
 			}
 		}
-		add("BRIEF ranked table == next.json top 12", len(missing) == 0, strings.Join(missing, ", "))
+		add("BRIEF ranked table == next.json top 12", len(missingBrief) == 0, strings.Join(missingBrief, ", "))
 		if limit > 10 {
 			limit = 10
 		}
+		// A separate slice: sharing one between the two assertions made the
+		// second one fail whenever the first failed, for the wrong reason.
+		missingMD := []string{}
 		for _, it := range plan.Items[:limit] {
 			if !strings.Contains(nextMD, it.Target) {
-				missing = append(missing, it.Target)
+				missingMD = append(missingMD, it.Target)
 			}
 		}
-		add("next.md top 10 == next.json", len(missing) == 0, strings.Join(missing, ", "))
+		add("next.md top 10 == next.json", len(missingMD) == 0, strings.Join(missingMD, ", "))
 	}
 
 	var mp struct {
@@ -399,13 +402,26 @@ func runDir(root, name, source string) Result {
 	}
 	_, statErr := os.Stat(filepath.Join(root, "bountykit/rules-diff.md"))
 	add("rules-diff.md present", statErr == nil, "")
-	add("no false mainnet claim", !strings.Contains(strings.ToLower(brief), "mainnet testing is forbidden") || strings.Contains(strings.ToLower(brief), "forbidden"), "")
+	// A brief that claims mainnet testing is forbidden while the intake says it
+	// is allowed is a false claim the operator will act on.
+	falseMainnet := falseMainnetClaim(brief, b.MainnetTesting)
+	mainnetDetail := ""
+	if falseMainnet {
+		mainnetDetail = "brief says forbidden, intake says " + b.MainnetTesting
+	}
+	add("no false mainnet claim", !falseMainnet, mainnetDetail)
 	return r
 }
 
-func min(a, b int) int {
-	if a < b {
-		return a
+// falseMainnetClaim reports whether the BRIEF claims mainnet testing is
+// forbidden while the intake says otherwise. It can only be true on a genuine
+// contradiction: with no intake verdict there is nothing to contradict.
+func falseMainnetClaim(brief, mainnetTesting string) bool {
+	if strings.TrimSpace(mainnetTesting) == "" {
+		return false
 	}
-	return b
+	if strings.Contains(strings.ToLower(mainnetTesting), "forbidden") {
+		return false
+	}
+	return strings.Contains(strings.ToLower(brief), "mainnet testing is forbidden")
 }

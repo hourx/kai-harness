@@ -18,10 +18,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/hourx/kai/internal/netx"
-	"github.com/hourx/kai/internal/scope"
-	"github.com/hourx/kai/internal/version"
-	"github.com/hourx/kai/internal/workspace"
+	"github.com/hourx/kai-harness/internal/netx"
+	"github.com/hourx/kai-harness/internal/scope"
+	"github.com/hourx/kai-harness/internal/version"
+	"github.com/hourx/kai-harness/internal/workspace"
 )
 
 // Options controls a recon run.
@@ -90,7 +90,7 @@ func Run(ctx context.Context, p *workspace.Program, opts Options) (Summary, erro
 		opts.MaxBundles = 100
 	}
 	if opts.UserAgent == "" {
-		opts.UserAgent = "kai/" + strings.SplitN(version.Version, "-", 2)[0] + " (+https://github.com/hourx/kai)"
+		opts.UserAgent = "kai/" + strings.SplitN(version.Version, "-", 2)[0] + " (+https://github.com/hourx/kai-harness)"
 	}
 	logf := func(format string, args ...any) {
 		if opts.Log != nil {
@@ -118,6 +118,11 @@ func Run(ctx context.Context, p *workspace.Program, opts Options) (Summary, erro
 	}
 	client := netx.New(opts.UserAgent, opts.RPS, allow)
 	defer client.Close()
+	// CT logs, code hosts and wayback are not the target under test: their TLS
+	// must be verified so a MITM on the way there cannot inject hosts into the
+	// recon output. Target probing keeps the permissive client above.
+	thirdParty := netx.NewStrict(opts.UserAgent, opts.RPS, nil)
+	defer thirdParty.Close()
 	if opts.Session != "" || len(opts.SessionHeaders) > 0 {
 		allowed := append([]string{}, opts.SeedHosts...)
 		allowed = append(allowed, opts.Domains...)
@@ -135,7 +140,7 @@ func Run(ctx context.Context, p *workspace.Program, opts Options) (Summary, erro
 	// 1. Discover.
 	hostSet := map[string]struct{}{}
 	for _, domain := range opts.Domains {
-		hosts, sources := Discover(ctx, client, domain, opts.Adapters)
+		hosts, sources := Discover(ctx, thirdParty, domain, opts.Adapters)
 		logf("  %-24s %4d hosts  (%s)", domain, len(hosts), strings.Join(sources, ", "))
 		for _, h := range hosts {
 			hostSet[h] = struct{}{}

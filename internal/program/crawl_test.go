@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/hourx/kai/internal/netx"
+	"github.com/hourx/kai-harness/internal/netx"
 )
 
 func TestHeaderFalsePositiveFromGitBookImage(t *testing.T) {

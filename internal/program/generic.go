@@ -12,7 +12,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hourx/kai/internal/netx"
+	"github.com/hourx/kai-harness/internal/netx"
+	"github.com/hourx/kai-harness/internal/strutil"
 )
 
 // DetectPlatform maps a URL to a reader. HackerOne is handled separately by
@@ -520,19 +521,7 @@ func extractConstraints(policy string) []string {
 			out = append(out, r.label)
 		}
 	}
-	return uniqueStrings(out)
-}
-
-func uniqueStrings(in []string) []string {
-	seen := map[string]bool{}
-	out := make([]string, 0, len(in))
-	for _, v := range in {
-		if !seen[v] {
-			seen[v] = true
-			out = append(out, v)
-		}
-	}
-	return out
+	return strutil.Unique(out)
 }
 
 func pageTitle(htmlBody []byte, text string) string {

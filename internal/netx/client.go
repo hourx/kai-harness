@@ -50,18 +50,30 @@ type Client struct {
 // SetSession attaches cookies and headers to every in-scope request.
 func (c *Client) SetSession(s Session) { c.sess = &s }
 
-// New builds a client. allow is consulted for every redirect target; return
-// false to stop following. Pass nil to follow redirects unconditionally.
+// New builds a client for the target under test. allow is consulted for every
+// redirect target; return false to stop following. Pass nil to follow redirects
+// unconditionally. TLS verification is deliberately off here: recon records the
+// certificate the target presents, and an expired or mismatched certificate is
+// itself worth reporting. Never use this client against a third-party service —
+// use NewStrict, or a MITM on the way to GitHub or a CT log goes unnoticed.
 func New(ua string, rps int, allow func(*url.URL) bool) *Client {
+	return newClient(ua, rps, allow, false)
+}
+
+// NewStrict builds a client that verifies TLS. Use it for every endpoint that
+// is not the target under test: code hosts, CT logs, platform APIs.
+func NewStrict(ua string, rps int, allow func(*url.URL) bool) *Client {
+	return newClient(ua, rps, allow, true)
+}
+
+func newClient(ua string, rps int, allow func(*url.URL) bool, verifyTLS bool) *Client {
 	tr := &http.Transport{
 		Proxy:               http.ProxyFromEnvironment,
 		MaxIdleConns:        100,
 		MaxIdleConnsPerHost: 2,
 		IdleConnTimeout:     30 * time.Second,
 		TLSHandshakeTimeout: 10 * time.Second,
-		// Recon records the certificate rather than trusting it: an expired or
-		// mismatched certificate is itself worth reporting.
-		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+		TLSClientConfig:     &tls.Config{InsecureSkipVerify: !verifyTLS},
 	}
 	hc := &http.Client{
 		Transport: tr,
