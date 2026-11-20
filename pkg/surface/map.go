@@ -182,18 +182,43 @@ func segments(path string) []string {
 }
 
 // Module is the first meaningful path segment (skipping api, rest and vN).
+//
+// Segments that cannot be a path name are skipped rather than returned: a URL
+// lifted out of a JavaScript bundle often contains the string concatenation that
+// built it (`/" + "`), and a module called `" + "` would name an entity no
+// operator can test.
 func Module(path string) string {
-	for _, s := range segments(path) {
+	segs := segments(path)
+	for _, s := range segs {
 		low := strings.ToLower(s)
 		if low == "api" || low == "rest" || verRE.MatchString(low) {
 			continue
 		}
+		if !pathSegment(low) {
+			continue
+		}
 		return low
 	}
-	if len(segments(path)) > 0 {
-		return strings.ToLower(segments(path)[0])
-	}
+	// Nothing usable: reporting the root is honest, resurrecting "api" or "v1"
+	// as a module would name an entity that does not exist.
 	return "/"
+}
+
+// pathSegment reports whether a segment is a plausible path name: letters,
+// digits and the punctuation a URL carries. Everything else is source code.
+func pathSegment(s string) bool {
+	if s == "" || len(s) > 64 {
+		return false
+	}
+	for _, r := range s {
+		switch {
+		case r >= 'a' && r <= 'z', r >= '0' && r <= '9':
+		case r == '-' || r == '_' || r == '.' || r == '~' || r == '%' || r == '@' || r == '+':
+		default:
+			return false
+		}
+	}
+	return true
 }
 
 // Class names the business area a path belongs to.

@@ -35,10 +35,14 @@ type Contract struct {
 	DriverVersion   int    `json:"driver_version"`
 	DriverName      string `json:"driver_name"`
 	Platform        string `json:"platform"`
-	Name            string `json:"name"`
-	Handle          string `json:"handle,omitempty"`
-	URL             string `json:"url"`
-	RequiresAuth    bool   `json:"requires_auth"`
+	// Archetype is the operator's own name for the shape of this program. When
+	// empty the model infers it; when set it is never overridden, because a
+	// human who has read the policy outranks a heuristic.
+	Archetype    string `json:"archetype,omitempty"`
+	Name         string `json:"name"`
+	Handle       string `json:"handle,omitempty"`
+	URL          string `json:"url"`
+	RequiresAuth bool   `json:"requires_auth"`
 
 	Intake    Snapshot           `json:"intake"`
 	Scope     []Rule             `json:"scope"`
