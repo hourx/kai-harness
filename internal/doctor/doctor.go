@@ -11,10 +11,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hourx/kai-harness/internal/netx"
-	"github.com/hourx/kai-harness/internal/recon"
 	"github.com/hourx/kai-harness/internal/session"
-	"github.com/hourx/kai-harness/internal/workspace"
+	"github.com/hourx/kai-harness/pkg/netx"
+	"github.com/hourx/kai-harness/pkg/recon"
+	"github.com/hourx/kai-harness/pkg/workspace"
 )
 
 // Item is one environment check.

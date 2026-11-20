@@ -409,3 +409,42 @@ produces a complete, useful output (deterministic fallback). No LLM ever sits in
   as the acceptance test (§9.5).
 - **Determinism, scope gate, no-auto-submit, stdlib-only:** unchanged. Every section above preserves
   them.
+
+---
+
+## Status — what has landed
+
+| Item | State |
+|---|---|
+| Tier 0 correctness debt | done |
+| T1.1 outcome logging (`kai outcome`, `state/outcomes.jsonl`) | done |
+| T1.2 ranking feedback into `kai next` | done |
+| T1.3 `kai plan` — queue into waves by precondition | done (`pkg/hypothesis`) |
+| T1.4 `kai board` — cross-program "do today" | done (`pkg/board`) |
+| T1.5 evidence capture | done (`pkg/evidence`, `kai evidence`) |
+| T1.6 report drafting | done (`pkg/report`, `kai report-draft`) |
+| §10 step 3: public surface under `pkg/` | done — engine closure promoted, `internal/` keeps CLI glue and operator conveniences |
+| CI | done (`.github/workflows/ci.yml`: gofmt, vet, build, test, `-race`, leak guard, install check) |
+| §10 step 2: `kai serve` (HTTP/JSON API) | planned |
+| §10 step 4-5: driver manifests, model/archetypes | planned |
+| §10 step 6: LLM planner seam | planned, last on purpose |
+
+Deviations from the original text, recorded so the plan stays honest:
+
+- T1.3 planned to dedupe per `(host, class)`. The ranked queue is path-level and carries no host,
+  so the step merges per class only and lists the collapsed paths under `merged_hypotheses`.
+- T1.2's "cluster dampening" landed as a convergent effect, from the tests: a fresh negation or
+  informational is dropped outright and reported on stderr; a stale negation stays in the queue
+  with a penalty and a note ("retest only if the surface changed since"); a finding lifts its
+  cluster siblings so the same object root is tested together; and a cluster whose members were
+  dropped is pruned rather than left half-empty.
+- `kai evidence` is a plain `add|list|show|attach` surface, not a capture wizard: the operator or
+  an agent already holds the bytes; kai's job is the hash and the index.
+
+## Next
+
+1. `kai serve` — token-gated HTTP/JSON over the same functions the CLI calls, so a real UI can be
+   built without shelling out.
+2. `kai.toml` program manifest plus platform drivers (policy fetch, submission channel).
+3. Program model and archetypes on top of the surface store, then invariant testing.
+4. LLM planner seam — proposes into `plan.json`, never executes.

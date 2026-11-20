@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/hourx/kai-harness/internal/outcome"
-	"github.com/hourx/kai-harness/internal/workspace"
+	"github.com/hourx/kai-harness/pkg/outcome"
+	"github.com/hourx/kai-harness/pkg/workspace"
 )
 
 // cmdOutcome records what a target turned out to be — the return path of the

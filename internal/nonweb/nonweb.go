@@ -18,10 +18,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hourx/kai-harness/internal/netx"
-	"github.com/hourx/kai-harness/internal/program"
-	"github.com/hourx/kai-harness/internal/strutil"
-	"github.com/hourx/kai-harness/internal/workspace"
+	"github.com/hourx/kai-harness/pkg/netx"
+	"github.com/hourx/kai-harness/pkg/program"
+	"github.com/hourx/kai-harness/pkg/strutil"
+	"github.com/hourx/kai-harness/pkg/workspace"
 )
 
 // Workflow is one CI workflow file and the risky patterns found in it.

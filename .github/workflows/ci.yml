@@ -1,0 +1,58 @@
+name: ci
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.21'
+          cache: false
+
+      - name: gofmt
+        run: |
+          out=$(gofmt -l ./cmd ./internal ./pkg)
+          if [ -n "$out" ]; then
+            echo "these files are not gofmt-clean:"
+            echo "$out"
+            exit 1
+          fi
+
+      - name: vet
+        run: go vet ./...
+
+      - name: build
+        run: go build ./...
+
+      - name: test
+        run: go test ./...
+
+      - name: test (race)
+        run: go test -race ./...
+
+      - name: no private paths or secrets in tracked files
+        run: |
+          # The /roo[t]/ spelling keeps this rule from matching its own source line.
+          if grep -rInE '(/roo[t]/|/home/[a-z]+/|BEGIN [A-Z ]*PRIVATE KEY|sk-[A-Za-z0-9]{20,})' \
+              --include='*.go' --include='*.md' --include='*.yml' --include='*.yaml' \
+              --exclude-dir=.git . ; then
+            echo "::error::a private path or secret-shaped string is tracked in this repo"
+            exit 1
+          fi
+          echo "clean"
+
+      - name: install check
+        run: |
+          cd "$(mktemp -d)"
+          go install github.com/hourx/kai-harness/cmd/kai@latest || go install github.com/hourx/kai-harness/cmd/kai@master
+          "$(go env GOPATH)/bin/kai" version

@@ -1,5 +1,7 @@
 # kai
 
+[![ci](https://github.com/hourx/kai-harness/actions/workflows/ci.yml/badge.svg)](https://github.com/hourx/kai-harness/actions/workflows/ci.yml)
+
 > Know the boundary. Prepare the context.
 
 `kai` is a deterministic context harness for bug-bounty work, written in Go with
@@ -131,6 +133,10 @@ only for text sources and only after you have verified each host in `policy.md`.
 | `map <program>` | structure endpoints |
 | `next <program>` | ranked test queue |
 | `outcome <program> --status S [--class C] [--note T] <target...>` | record what a target turned out to be |
+| `plan <program> [--out file]` | turn the ranked queue into waves by precondition |
+| `board [<program>]` | what is worth doing today, across every program |
+| `evidence <program> [list\|add\|show\|attach]` | capture the raw proof behind a finding |
+| `report-draft <program> <evidence-id> [--platform hackerone\|bugcrowd\|yandex]` | render a submission draft in the platform's fields |
 | `diff <program>` | show last surface diff |
 | `pack <program> [-o dist] [--include-raw] [--include-session]` | build handoff ZIP |
 | `export <program> --to <dir>` | write agent context files into a campaign directory |
@@ -189,6 +195,37 @@ The loop is deterministic by design: the same inputs always produce the same que
 There is no model, no randomness, and no hidden weight re-trained between runs.
 
 ---
+
+## From queue to submission draft
+
+Four commands close the loop between "the tool found something" and "a triager can
+read it". None of them decides anything for you.
+
+```
+kai plan acme                       # queue -> waves: what needs no session, what needs a login
+kai board                           # every program, ranked into today's list
+kai evidence acme add --kind response --host api.example.com --method GET \
+    --path /v1/orders/7 --status 200 --file raw.json --note "other tenant's order"
+kai evidence acme list              # ids, hashes, blobs
+kai report-draft acme 4f2a1c9b0e77 --platform hackerone --title "IDOR on /v1/orders/7"
+```
+
+- `plan` groups the queue by what each hypothesis needs (`none`, `session`,
+  `two-sessions`) and keeps one step per class — several paths asking the same question
+  collapse into the highest-scoring one, and the rest are listed under `merged_hypotheses`
+  so nothing disappears. `plan.json` is plain data: disagree with a precondition and edit it.
+- `board` reads state only, so the same disk produces the same board: findings waiting on
+  your hand rank above hunting work, stale surfaces ask for a refresh, and every row's
+  blockers are printed. `board.json` / `board.md` land in `KAI_HOME`.
+- `evidence` stores the raw bytes with a SHA-256 and a permissions-restricted index, so a
+  report drafted later can be tied to bytes that cannot silently change. Capturing identical
+  bytes twice is a no-op.
+- `report-draft` fills the platform's own fields (HackerOne, Bugcrowd, Yandex), prefills the
+  target, class and evidence list, and leaves description/impact/steps blank on purpose. It
+  runs the scope gate on the evidence's host and refuses to look confident when the gate says
+  OUT: the draft carries a warning banner instead.
+
+`kai` never sends a request while planning, never asserts scope on its own, and never submits.
 
 ## Scope gate and exit codes
 
@@ -358,7 +395,7 @@ the release binary; it would not turn `kai` into a library. For now, use
 
 ## Status
 
-Current line: `kai 0.11.3-dev`.
+Current line: `kai 0.12.0`.
 
 | Version | Contents |
 |---|---|
@@ -368,9 +405,28 @@ Current line: `kai 0.11.3-dev`.
 | v0.9 | `kai` identity, `run` / `audit` / `doctor` |
 | v0.10 | backup/restore, compact brief, triage ledger |
 | v0.11 | per-target outcome ledger and a convergent `next` queue |
+| v0.12 | engagement plan (`plan`), cross-program board (`board`), evidence capture, submission drafts, engine packages under `pkg/` |
 
-`kai` is a context preparer, not a hunting agent. The full design lives in
-[`SPEC.md`](SPEC.md).
+`kai` is a context preparer and an evidence bookkeeper, not a hunting agent. The full design
+lives in [`SPEC.md`](SPEC.md); the improvement roadmap in [`IMPROVEMENT-PLAN.md`](IMPROVEMENT-PLAN.md).
+
+### Using the engine from Go
+
+The deterministic core lives under `pkg/` and is importable:
+
+| Package | Purpose |
+|---|---|
+| `pkg/scope` | rule parsing and the scope gate |
+| `pkg/program` | intake, boundaries, validation |
+| `pkg/recon` | surface store (hosts, endpoints, bundles) |
+| `pkg/surface` | structure, ranking, outcomes |
+| `pkg/hypothesis` | queue → engagement plan |
+| `pkg/evidence` | hashed evidence capture |
+| `pkg/report` | platform field sets |
+| `pkg/outcome`, `pkg/triage`, `pkg/workspace` | ledgers and state |
+
+`internal/` keeps the CLI wiring and operator conveniences. Anything under `pkg/` is
+covered by tests and safe to depend on; the AGPL applies to both.
 
 ## License
 

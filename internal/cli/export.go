@@ -10,8 +10,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/hourx/kai-harness/internal/program"
-	"github.com/hourx/kai-harness/internal/workspace"
+	"github.com/hourx/kai-harness/pkg/program"
+	"github.com/hourx/kai-harness/pkg/workspace"
 )
 
 func safeSlug(s string) string {

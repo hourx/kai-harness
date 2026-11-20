@@ -17,18 +17,18 @@ import (
 	"github.com/hourx/kai-harness/internal/audit"
 	"github.com/hourx/kai-harness/internal/backup"
 	"github.com/hourx/kai-harness/internal/doctor"
-	"github.com/hourx/kai-harness/internal/netx"
 	"github.com/hourx/kai-harness/internal/nonweb"
-	"github.com/hourx/kai-harness/internal/outcome"
 	"github.com/hourx/kai-harness/internal/pack"
-	"github.com/hourx/kai-harness/internal/program"
-	"github.com/hourx/kai-harness/internal/recon"
-	"github.com/hourx/kai-harness/internal/scope"
 	"github.com/hourx/kai-harness/internal/session"
-	"github.com/hourx/kai-harness/internal/surface"
-	"github.com/hourx/kai-harness/internal/triage"
-	"github.com/hourx/kai-harness/internal/version"
-	"github.com/hourx/kai-harness/internal/workspace"
+	"github.com/hourx/kai-harness/pkg/netx"
+	"github.com/hourx/kai-harness/pkg/outcome"
+	"github.com/hourx/kai-harness/pkg/program"
+	"github.com/hourx/kai-harness/pkg/recon"
+	"github.com/hourx/kai-harness/pkg/scope"
+	"github.com/hourx/kai-harness/pkg/surface"
+	"github.com/hourx/kai-harness/pkg/triage"
+	"github.com/hourx/kai-harness/pkg/version"
+	"github.com/hourx/kai-harness/pkg/workspace"
 )
 
 const usageText = `kai — deterministic context packs for bug bounty
@@ -64,6 +64,10 @@ Commands:
   next    <program>                                          ranked test queue
   outcome <program> --status S [--class C] [--note T] <target...>
                                                              record what a target turned out to be
+  plan    <program>                                          queue -> waves by what each step needs
+  board   [<program>]                                        what is worth doing today (all programs)
+  evidence <program> [list|add|show|attach]                  capture the raw proof behind a finding
+  report-draft <program> <evidence-id> [--platform P]        draft a submission in the platform's fields
   diff    <program>                                          show last surface diff
   pack    <program> [-o dist] [--include-raw] [--include-session]
                                                              build handoff ZIP
@@ -128,6 +132,14 @@ func Run(args []string) int {
 		return cmdNext(args[1:])
 	case "outcome":
 		return cmdOutcome(args[1:])
+	case "plan":
+		return cmdPlan(args[1:])
+	case "board":
+		return cmdBoard(args[1:])
+	case "evidence":
+		return cmdEvidence(args[1:])
+	case "report-draft":
+		return cmdReportDraft(args[1:])
 	case "diff":
 		return cmdDiff(args[1:])
 	case "pack":

@@ -16,9 +16,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hourx/kai-harness/internal/strutil"
-	"github.com/hourx/kai-harness/internal/version"
-	"github.com/hourx/kai-harness/internal/workspace"
+	"github.com/hourx/kai-harness/pkg/strutil"
+	"github.com/hourx/kai-harness/pkg/version"
+	"github.com/hourx/kai-harness/pkg/workspace"
 )
 
 // Artifacts are the recon files a downstream pipeline already knows how to read.
