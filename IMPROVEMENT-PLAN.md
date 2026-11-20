@@ -526,11 +526,15 @@ Deviations from the original text, recorded so the plan stays honest:
 
 ## Next
 
-1. Mobile-friendly card layout was the second thing the first live look asked for. The first half of
-   this item — `kai serve --watch`, the SSE stream over `pkg/progress` — shipped in v0.15.0: the run
-   is now followable while it happens, in the dashboard and from any HTTP client.
-2. Program archetypes on top of the driver manifests (HackerOne/Bugcrowd/self-hosted/Cantina shapes),
+Direction: the CLI is the product. `kai serve` is a read-only side face over the same state, not a
+workstream of its own, and nothing here is mobile-first.
+
+1. Program archetypes on top of the driver manifests (HackerOne/Bugcrowd/self-hosted/Cantina shapes),
    and a reader for platforms whose policy is not plain HTML (Bugcrowd's API, an authenticated
    session) — the driver seam already names the reader, so this is registration, not core change.
-3. Program model and archetypes on top of the surface store, then invariant testing.
-4. LLM planner seam — proposes into `plan.json`, never executes.
+2. Program model and archetypes on top of the surface store, then invariant testing.
+3. LLM planner seam — proposes into `plan.json`, never executes.
+
+**Deferred, not next:** a mobile-friendly card layout for the dashboard. The live stream that landed
+in v0.15.0 is already usable from any HTTP client, so a phone layout buys nothing while the CLI is
+where the work happens; revisit only if the dashboard gets a reason to exist on a phone.
