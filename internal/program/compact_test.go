@@ -17,7 +17,7 @@ func writeCompactFixture(t *testing.T, assets []Asset, scopeText string) string 
 	in := Intake{
 		Name:      "fixture",
 		URL:       "https://example.com/program",
-		Platform:  "yandex",
+		Platform:  "hackerone",
 		FetchedAt: time.Now().UTC(),
 		Scorecard: Score{Total: 42, Verdict: "review"},
 		Assets:    assets,

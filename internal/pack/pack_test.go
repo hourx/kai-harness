@@ -43,6 +43,6 @@ func TestBuildKeepsBountykitContractDir(t *testing.T) {
 		}
 	}
 	if !found {
-		t.Error("archive has no bountykit/ entries — Kairos contract broken")
+		t.Error("archive has no bountykit/ entries — downstream contract broken")
 	}
 }

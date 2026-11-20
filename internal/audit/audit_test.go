@@ -52,12 +52,12 @@ func TestResultText(t *testing.T) {
 func TestScopeRulesStripsInlineComments(t *testing.T) {
 	got := scopeRules([]string{
 		"# full-line comment stays out",
-		"yandex.com   # apex of *.yandex.com (MS)",
-		"*.yandex.ru # MS infra",
+		"example.com   # apex of *.example.com",
+		"*.example.org # sibling wildcard",
 		"",
-		"ya.ru",
+		"example.net",
 	})
-	want := []string{"yandex.com", "*.yandex.ru", "ya.ru"}
+	want := []string{"example.com", "*.example.org", "example.net"}
 	if len(got) != len(want) {
 		t.Fatalf("scopeRules = %v, want %v", got, want)
 	}

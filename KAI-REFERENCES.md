@@ -4,8 +4,8 @@ Assessment of 10 reference repositories as initial learning material for kai.
 Read on 2026-11-20. All findings below come from the actual repository contents
 (clone metadata + raw file reads), not from repository descriptions alone.
 
-Working copies of everything fetched during this assessment live in
-`/root/.hermes/cache/scratch/kai-refs/` (scratch, pruneable).
+Working copies of everything fetched during this assessment live in a pruneable
+scratch directory outside the repo.
 
 ---
 

@@ -2,8 +2,8 @@
 
 Date: 2026-11-20 (v2, same day). Baseline commit: 89980d1. Binary installed: kai 0.11.3-dev (89980d1).
 Repo renamed `hourx/kai` → **`hourx/kai-harness`**; module `github.com/hourx/kai-harness`; working dir
-`/root/kai-harness`. CLI binary keeps the name `kai` (ripgrep/rg precedent) so every skill, doc and
-`KAI_HOME` path stays valid. Sections 9–13 carry the design agreed with the operator on 2026-11-20.
+`kai-harness`. CLI binary keeps the name `kai` (ripgrep/rg precedent) so existing docs and
+`KAI_HOME` paths stay valid. Sections 9–13 carry the design agreed with the operator on 2026-11-20.
 
 Status: sections 0–8 = audit + tiered plan. Sections 9–13 = design of record. Sprint 1 (Tier 0 +
 T1.1/T1.2) is implemented in this commit; everything else here is still PLAN ONLY.
@@ -253,7 +253,7 @@ policy, then executes. Replayable, auditable, and the model can be swapped or ru
 - Budgets: tokens per program/day, requests per pattern, and a kill switch.
 - kai never submits a report; a human does.
 - The kernel keeps zero external deps and full test coverage. Only the planner depends on an LLM
-  endpoint (vanarouter).
+  endpoint (a self-hosted router).
 
 ### Why this ordering
 
@@ -264,9 +264,9 @@ auditable.
 
 ### Pieces already on this box
 
-vanarouter :20128 (model routing), honcho (memory), campaign history in /root/Bug Bounty (pattern
-source), the evidence/ledger conventions, and the bb-* skills that already encode the roles
-(bb-tester / bb-skeptic / bb-reporter). The vision is assembly, not invention.
+Model routing, memory, campaign history (the pattern source), the evidence/ledger conventions, and
+the role skills that already encode tester / skeptic / reporter. The vision is assembly, not
+invention.
 
 ---
 
@@ -335,16 +335,16 @@ Inputs, in order: **spec** (policy page, docs, OpenAPI/GraphQL SDL, ABI, mobile 
 Provenance is preserved per row; sweeps weight hypotheses by confidence; every output prints the
 confidence of the rows it relied on, so the operator can see which part is a guess.
 
-### 9.5 Spike program (chosen 2026-11-20)
+### 9.5 Spike target (chosen 2026-11-20)
 
-**ALSCO** (`/root/Bug Bounty/alsco`) — evidence-first spike, because:
+**A live, evidence-first program** — chosen because:
 
-- the artifacts already exist locally (recon logs, JS bundles) — the spike needs **zero new requests**;
-- it has **two known findings** (G.S.3 content bypass, G.S.85 script bypass) that are exactly
-  capability-matrix / invariant violations, so the spike has a real acceptance test: *the model, built
-  only from local artifacts, must place both findings in its top-ranked hypotheses*. Back-testing a
-  model against a known bug is the only honest way to know the model works;
-- ALSCO is live, so a working model immediately improves a pending submission.
+- its artifacts already exist locally (recon logs, JS bundles) — the spike needs **zero new requests**;
+- it has **two known findings** that are exactly capability-matrix / invariant violations, so the
+  spike has a real acceptance test: *the model, built only from local artifacts, must place both
+  findings in its top-ranked hypotheses*. Back-testing a model against a known bug is the only honest
+  way to know the model works;
+- the program is live, so a working model immediately improves a pending submission.
 
 Secondary (free, but not the primary): spec-first micro-run on the Claude MCP connector surface
 (stored JSON tool schemas = machine-readable spec, no network) and on the Coinbase registry
@@ -392,20 +392,20 @@ produces a complete, useful output (deterministic fallback). No LLM ever sits in
 ## 13. Decisions locked with the operator (2026-11-20)
 
 - **Name:** repo + module `kai-harness`; CLI binary stays `kai`. Applied to repo, module path, working
-  dir, Kairos provisioning defaults and the kai-tool-development / bb-orchestrator skills.
+  dir, the operator's provisioning defaults and the operator's internal skills.
 - **Public release:** open-core **split** (recommendation, operator to confirm the exact boundary):
   public repo = engine (`pkg/`), CLI, driver interface, public pattern layer, docs; private = pattern
   layer derived from live campaigns, hosted/service layer (tenancy, billing), and anything carrying a
   live-hunting advantage. Public from day one is correct precisely because the pattern library is
   supposed to be fed by contributions — but a pattern that encodes an unfolding campaign stays out.
-- **Licence (recommendation, needs one-word confirmation):** AGPL-3.0 for the public core. Rationale:
-  a permissive licence lets a competitor host this as a service without contributing back, which
-  directly undercuts the hosted tier being sold; AGPL forces them to publish or buy. Third-party
-  material (humanize CC-BY-4.0, Cybermes Apache-2.0, Claude-BugHunter split `LICENSE`/`LICENSE-CONTENT`)
+- **Licence: AGPL-3.0 — decided and applied** (LICENSE + README). Rationale: the plan sells a hosted
+  tier, and a permissive licence lets a competitor host this as a service without contributing back,
+  which directly undercuts that tier; AGPL forces them to publish or buy. Third-party material
+  (humanize CC-BY-4.0, Cybermes Apache-2.0, Claude-BugHunter split `LICENSE`/`LICENSE-CONTENT`)
   stays reference data with attribution — never re-licensed text.
 - **Pattern extraction from operator campaigns: APPROVED**, destination = the **private** layer.
   Publishing the invariant that a live program is currently being hunted with would hand over the edge.
-- **Spike program:** ALSCO, evidence-first, with the back-test against the two known findings as the
-  acceptance test (§9.5).
+- **Spike target:** the live evidence-first program, with the back-test against its two known findings
+  as the acceptance test (§9.5).
 - **Determinism, scope gate, no-auto-submit, stdlib-only:** unchanged. Every section above preserves
   them.

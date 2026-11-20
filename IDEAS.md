@@ -1,58 +1,57 @@
-# Ide yang ditunda (deferred)
+# Deferred ideas
 
-Catatan ini bukan roadmap kai. Kai **difreeze** sebagai context packer: tidak
-ada hunting, validasi, report, atau submit di binari. Ide di bawah **boleh**
-diterapkan selama masih berupa *artefak konteks* yang deterministik.
+This file is not a roadmap for kai. kai is **frozen** as a context harness: no hunting, no
+validation, no report writing, no submission inside the binary. The ideas below **may** be
+implemented as long as they stay deterministic *context artifacts*.
 
 ## Status
 
-- [x] 1. `validation-gate.md` otomatis — dipakai `kai export`.
-- [x] 2. Cluster hipotesis — `clusters` + `variants` di `next.json`.
-- [x] 3. `tags` di `next.json` — `api`, `auth`, `idor`, `logic`, dll.
-- [x] `kai export <program> --to <dir>` — jembatan ke folder campaign Kairos.
+- [x] 1. `validation-gate.md` generated automatically — consumed by `kai export`.
+- [x] 2. Hypothesis clusters — `clusters` + `variants` in `next.json`.
+- [x] 3. `tags` in `next.json` — `api`, `auth`, `idor`, `logic`, and so on.
+- [x] 4. `kai export <program> --to <dir>` — a bridge into a campaign folder.
 
-## 1. `validation-gate.md` otomatis
+## 1. Automatic `validation-gate.md`
 
-**Sumber:** `awarexone/Agentic-Bug-Hunter` (7-Question Gate),
-`elementalsouls/Claude-BugHunter` (triage-validation).
+**Source:** `awarexone/Agentic-Bug-Hunter` (7-question gate),
+`elementalsouls/Claude-BugHunter` (triage validation).
 
-Isi 7 pertanyaan Skeptic sudah di-prefill dari data kai:
+The gate questions are pre-filled from kai's own data:
 
-- apakah target lolos `scope.txt`
-- apakah kelas dampaknya diterima program (dari `boundaries.md`)
-- apakah ada PoC / bukti reproducible
-- apakah sudah ada di `findings/dupes.md`
+- did the target pass `scope.txt`
+- is the impact class accepted by the program (from `boundaries.md`)
+- is there a PoC or reproducible evidence
+- is it already in `findings/dupes.md`
 
-Kai bisa menghasilkan file ini secara deterministik dari `intake.json` +
-`boundaries` + ledger. Dipakai agen Skeptic, bukan kai.
+kai can produce this file deterministically from `intake.json` + `boundaries` + the ledger. It is
+consumed by the downstream validator, not by kai.
 
-## 2. Cluster hipotesis di `next`
+## 2. Hypothesis clusters in `next`
 
-**Sumber:** `KeygraphHQ/shannon` (finding reconciliation: merge + dedupe).
+**Source:** `KeygraphHQ/shannon` (finding reconciliation: merge + dedupe).
 
-Puluhan endpoint dengan akar sama, misalnya
-`/api/organizations/{id}/...`, masih muncul sebagai hipotesis terpisah.
-Digabung menjadi satu hipotesis + daftar varian supaya agen tidak
-menguji ulang permukaan yang sama.
+Dozens of endpoints with the same root, for example `/api/organizations/{id}/...`, still show up as
+separate hypotheses. They are merged into one hypothesis plus a list of variants, so an agent does
+not re-test the same surface.
 
-## 3. `tags` di `next.json`
+## 3. `tags` in `next.json`
 
-**Sumber:** `zhaoxuya520/reverse-skill`, `aegisxresearch/AegisX-Skills`
-(router + index, bukan dump semua skill).
+**Source:** `zhaoxuya520/reverse-skill`, `aegisxresearch/AegisX-Skills`
+(a router plus an index, instead of dumping every skill).
 
-Menambahkan tag seperti `["api", "auth-required", "idor", "priority-high"]`
- supaya agen bisa retrieval by tag tanpa memuat 150 hypotheses sekaligus.
-Selaras dengan pola Maus/Hermes: index dulu, baca detail hanya saat cocok.
+Tags such as `["api", "auth-required", "idor", "priority-high"]` let an agent retrieve by tag instead
+of loading 150 hypotheses at once. This matches the index-first pattern: read the index, load the
+detail only on a match.
 
-## Filosofi yang sudah dipakai kai
+## Philosophy kai already follows
 
-- `aicodeking/leanrea`: skill kecil, agen yang menjalankan tool nyata —
-  lebih murah & cepat dari MCP dengan ratusan tool
-- `DietrichGebert/ponytail`: tulis hanya yang perlu, tapi jangan pangkas
-  validasi, error handling, atau keamanan
-- `blader/humanizer`: penting untuk draft laporan, bukan untuk kai
+- `aicodeking/leanrea`: small skills, an agent driving real tools — cheaper and faster than an MCP
+  server with hundreds of tools.
+- `DietrichGebert/ponytail`: write only what is needed, but never cut validation, error handling or
+  safety.
+- `blader/humanizer`: matters for report drafts, not for kai.
 
-## Catatan
+## Note
 
-Jangan implementasi ini sebelum ada skill Hermes yang benar-benar
-membutuhkannya. Kalau tidak, kai cuma bertambah gemuk tanpa pemakai.
+Do not implement any of this before a downstream skill actually needs it. Otherwise kai only gets
+fatter with nobody using the new parts.

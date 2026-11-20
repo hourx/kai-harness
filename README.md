@@ -374,4 +374,5 @@ Current line: `kai 0.11.3-dev`.
 
 ## License
 
-Apache-2.0.
+AGPL-3.0. The core is free to use, modify and self-host; anyone who offers it as
+a network service must publish their changes. See [`LICENSE`](LICENSE).

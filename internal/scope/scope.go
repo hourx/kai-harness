@@ -1,5 +1,4 @@
-// Package scope implements the same scope semantics as
-// Kairos/scripts/scope_check.py:
+// Package scope implements a deterministic scope gate:
 //
 //   - exact host       api.example.com
 //   - wildcard         *.example.com  (subdomains only, never the apex)

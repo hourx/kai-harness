@@ -1,7 +1,7 @@
-// Package pack builds the handoff ZIP that Kairos consumes.
+// Package pack builds the handoff ZIP that the downstream agent consumes.
 //
-// The archive layout mirrors workspace/<program>/ from
-// Kairos/workspace/_template so the agent needs no translation layer.
+// The archive layout mirrors the agent's workspace/<program>/ template, so the
+// agent needs no translation layer.
 package pack
 
 import (
@@ -21,7 +21,7 @@ import (
 	"github.com/hourx/kai-harness/internal/workspace"
 )
 
-// Artifacts are the recon files bugbounty-pipeline already knows how to read.
+// Artifacts are the recon files a downstream pipeline already knows how to read.
 var Artifacts = []string{
 	"subs.txt",
 	"live.txt",
@@ -430,7 +430,7 @@ func brief(p *workspace.Program, now time.Time, opts Options) string {
 	fmt.Fprintf(&b, "`scope.txt`:\n\n```\n%s\n```\n\n", strings.TrimSpace(readOr(p, "scope.txt")))
 	fmt.Fprintf(&b, "`out-of-scope.txt`:\n\n```\n%s\n```\n\n", strings.TrimSpace(readOr(p, "out-of-scope.txt")))
 	b.WriteString("> Out-of-scope always wins. Never touch a host before it passes ")
-	b.WriteString("`kairos-scope " + p.Name + " <host>`.\n\n")
+	b.WriteString("`kai scope " + p.Name + " <host>`.\n\n")
 
 	b.WriteString("## What this pack contains\n\n| Artifact | Lines |\n| --- | --- |\n")
 	missing := make([]string, 0, len(Artifacts))
@@ -509,8 +509,10 @@ func brief(p *workspace.Program, now time.Time, opts Options) string {
 	}
 
 	b.WriteString("## Layout mapping\n\n")
-	fmt.Fprintf(&b, "The `bugbounty-pipeline` skill writes to `targets-%s/`.\n", p.Name)
-	b.WriteString("This pack uses the `docs/BUG-BOUNTY.md` convention instead:\n\n")
+	// The mapping is kept so a pack can be dropped into a pipeline that already
+	// writes to targets-<name>/ without moving any files.
+	fmt.Fprintf(&b, "A downstream pipeline may write raw output to `targets-%s/`. ", p.Name)
+	b.WriteString("This pack uses the layout below instead:\n\n")
 	b.WriteString("| pipeline path | this pack |\n| --- | --- |\n")
 	for _, name := range Artifacts {
 		fmt.Fprintf(&b, "| `targets-%s/%s` | `recon/%s` |\n", p.Name, name, name)

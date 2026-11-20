@@ -1,7 +1,7 @@
 // Package workspace owns the on-disk state for one bug bounty program.
 //
-// kai keeps its own state under data/<program>/ and never writes into a
-// Kairos checkout. The pack command is what bridges the two.
+// kai keeps its own state under data/<program>/ and never writes into an
+// agent's checkout. The pack command is what bridges the two.
 package workspace
 
 import (

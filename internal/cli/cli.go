@@ -68,7 +68,7 @@ Commands:
   pack    <program> [-o dist] [--include-raw] [--include-session]
                                                              build handoff ZIP
   export  <program> --to <dir>                               write agent context files
-                                                             into a Kairos campaign dir
+                                                             into a campaign dir
   status  [<program>]                                        show state
   version                                                    print version
 
@@ -507,8 +507,8 @@ func cmdRun(args []string) int {
 	}
 	code := cmdAudit([]string{name, "-dir", *out})
 	if code == 0 {
-		fmt.Printf("\nSelesai. ZIP: %s/<program>_*.zip → workspace/%s/ di Kairos\n", *out, name)
-		fmt.Println("Peringatan: session tidak ikut di-pack. Agent Kairos perlu session sendiri.")
+		fmt.Printf("\ndone. ZIP: %s/<program>_*.zip -> workspace/%s/\n", *out, name)
+		fmt.Println("note: no session was packed. The agent needs its own session.")
 	}
 	return code
 }
@@ -1252,7 +1252,7 @@ func cmdPack(args []string) int {
 	if *includeSession {
 		fmt.Println("warning session included — the archive contains live credentials")
 	}
-	fmt.Printf("next    unzip into the Kairos box as workspace/%s/\n", p.Name)
+	fmt.Printf("next    unzip into the agent workspace as workspace/%s/\n", p.Name)
 	return 0
 }
 

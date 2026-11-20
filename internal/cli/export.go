@@ -59,7 +59,7 @@ func pageMarkdown(p program.PageDoc) string {
 	return b.String()
 }
 
-// cmdExport writes the agent-facing context set into a Kairos campaign folder.
+// cmdExport writes the agent-facing context set into a campaign folder.
 // It is still a pure context export: no hunting, no validation, no submission,
 // and no writes back into kai's own state directory.
 func cmdExport(args []string) int {
@@ -87,7 +87,7 @@ func cmdExport(args []string) int {
 	nb, nerr := os.ReadFile(filepath.Join(p.Dir, "next.json"))
 	if nerr != nil || !bytes.Contains(nb, []byte(`"clusters"`)) {
 		if _, e := buildSurface(p); e != nil {
-			fmt.Fprintf(os.Stderr, "kai: next.json schema lama dan regenerate gagal (%v) — jalankan: kai recon %s\n", e, p.Name)
+			fmt.Fprintf(os.Stderr, "kai: old next.json schema and regeneration failed (%v) — run: kai recon %s\n", e, p.Name)
 		} else {
 			fmt.Println("regenerated next.json (tags + clusters)")
 		}
