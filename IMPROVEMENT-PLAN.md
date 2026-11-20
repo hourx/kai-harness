@@ -412,6 +412,76 @@ produces a complete, useful output (deterministic fallback). No LLM ever sits in
 
 ---
 
+## 14. The workspace face — `kai` with no arguments
+
+Goal: the operator sees the workflow running, not a wall of log lines. Bare `kai`
+on a terminal opens a four-pane workspace; everything else about the tool is
+unchanged.
+
+### Layout
+
+```
+─ kai ─ <program> · <platform> · scope N in / M out ───────────── <notice> ─
+┌ STEPS ─────────┐┌ PROCESS ───────────────────────────────────────────────┐
+│ ✓ discover  …  ││ 11:04:02 discover subdomain enumeration for …          │
+│ ▶ probe     …  ││ 11:04:05 discover gated 12 in scope, probing 9          │
+│ · harvest      ││ ────────────────────────────────────────────────────── │
+│ · map          ││ discovered 214  gated 12  probing 9  live 5            │
+│ · next         │└────────────────────────────────────────────────────────┘
+└────────────────┘┌ QUEUE ──────────────────────┐┌ RUNNING ──────────────────┐
+                  │ 1 <target>  <class>          ││ /enum                      │
+                  │ 2 <target>  <class>          ││ probe  21s                 │
+                  └──────────────────────────────┘└────────────────────────────┘
+> /enum --rps 10                                  /help · ctrl-c=abort
+```
+
+- **STEPS** — the five phases (discover, probe, harvest, map, next) and their
+  state, derived from `recon.Options.Confirm` phase boundaries plus what is on
+  disk at startup.
+- **PROCESS** — the kernel's own log lines, streamed, plus a counters line built
+  only from numbers that were actually parsed. Nothing is estimated: a counter
+  nobody measured is not shown.
+- **QUEUE** — `next.json` (ranked hypotheses), read, never recomputed.
+- **RUNNING** — the command in flight, its current phase and elapsed time.
+- **Command line** — everything goes through the same `Run()` dispatcher the CLI
+  uses, so scope gates, permissions and output files are identical.
+
+### Commands
+
+`/help /enum /map /next /queue /plan /board /status /evidence /scope /programs
+/clear /abort /quit` — `/enum` is real (recon, with live phases); `/map /next
+/plan /board /status /evidence /scope` capture the existing commands into the
+process pane; `/probe` and `/harvest` honestly report that phase-level re-runs
+need the Tier 2 checkpoints. `/enum` is a front-end for the recon pipeline, not
+a new capability.
+
+### Rules this face follows
+
+1. **No kernel change.** The only seams used are `recon.Options.Log` and
+   `recon.Options.Confirm`, both of which already existed. `pkg/progress` adapts
+   those lines into events; the deterministic engine is untouched.
+2. **No new dependency.** Hand-rolled: `internal/cli/canvas.go` is a grid
+   renderer (one write per frame, so streaming cannot tear the layout) and
+   `internal/cli/tui.go` is the app. The binary stays a single `go install`.
+3. **Non-TTY is unchanged.** Pipes, cron and CI still get the usage text and
+   exit 2; `KAI_NO_TUI=1` forces that path, `kai tui --demo` renders sample
+   frames with no terminal at all.
+4. **Every number is measured.** Phase state comes from the kernel, counters come
+   from parsed output, the queue comes from disk. Fabricated placeholders are a
+   bug, not a design choice.
+5. **Rendering never blocks a run.** The event bus drops events for a subscriber
+   that falls behind; progress is a view, not a participant.
+6. **The layout is testable.** `frame()` returns a grid; tests assert the frame is
+   exactly the terminal's size, that narrow terminals drop panes instead of
+   overflowing, and that the counters line never invents a value.
+
+### Install
+
+`make install` (default `PREFIX=/usr/local`) puts the binary where a bare `kai`
+finds it; `go install` alone writes to `$GOPATH/bin`, which is not on root's PATH.
+
+
+
 ## Status — what has landed
 
 | Item | State |
@@ -425,6 +495,7 @@ produces a complete, useful output (deterministic fallback). No LLM ever sits in
 | T1.6 report drafting | done (`pkg/report`, `kai report-draft`) |
 | §10 step 3: public surface under `pkg/` | done — engine closure promoted, `internal/` keeps CLI glue and operator conveniences |
 | CI | done (`.github/workflows/ci.yml`: gofmt, vet, build, test, `-race`, leak guard, install check) |
+| §14 split-pane workspace (bare `kai`, `kai tui`, `kai tui --demo`) | done (`pkg/progress`, `internal/cli/{canvas,tui}.go`) |
 | §10 step 2: `kai serve` (HTTP/JSON API) | planned |
 | §10 step 4-5: driver manifests, model/archetypes | planned |
 | §10 step 6: LLM planner seam | planned, last on purpose |

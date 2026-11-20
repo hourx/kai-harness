@@ -7,6 +7,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"sort"
@@ -23,6 +24,7 @@ import (
 	"github.com/hourx/kai-harness/pkg/netx"
 	"github.com/hourx/kai-harness/pkg/outcome"
 	"github.com/hourx/kai-harness/pkg/program"
+	"github.com/hourx/kai-harness/pkg/progress"
 	"github.com/hourx/kai-harness/pkg/recon"
 	"github.com/hourx/kai-harness/pkg/scope"
 	"github.com/hourx/kai-harness/pkg/surface"
@@ -74,6 +76,7 @@ Commands:
   export  <program> --to <dir>                               write agent context files
                                                              into a campaign dir
   status  [<program>]                                        show state
+  tui     [<program>] [--demo] [--frames N]                  split-pane workspace (bare kai on a terminal)
   version                                                    print version
 
 Exit codes for scope:
@@ -86,10 +89,17 @@ Environment:
 // Run dispatches a command and returns the process exit code.
 func Run(args []string) int {
 	if len(args) == 0 {
+		// On a terminal, the bare command opens the workspace. Everywhere else
+		// (pipes, cron, CI) it stays the usage text it always was.
+		if tuiWanted() {
+			return tuiInteractive("")
+		}
 		fmt.Fprint(os.Stderr, usageText)
 		return 2
 	}
 	switch args[0] {
+	case "tui":
+		return tuiCmd(args[1:])
 	case "version", "-v", "--version":
 		fmt.Println("kai " + version.String())
 		return 0
@@ -836,6 +846,21 @@ func cmdRecon(args []string) int {
 		fmt.Println("adapters none — crt.sh and direct HTTP only")
 	}
 
+	// A front-end (the split-pane workspace) may be watching this run and able to
+	// stop it. Both values are nil for every other caller, which leaves this
+	// command byte-for-byte what it was.
+	bus, fctx := frontEnd()
+	ctx := context.Background()
+	if fctx != nil {
+		ctx = fctx
+	}
+	var sink *progress.Writer
+	logw := io.Writer(os.Stdout)
+	if bus != nil {
+		sink = progress.NewWriter(bus)
+		logw = io.MultiWriter(os.Stdout, sink)
+	}
+
 	opts := recon.Options{
 		Domains:    domains,
 		SeedHosts:  p.ExactHosts(),
@@ -845,7 +870,7 @@ func cmdRecon(args []string) int {
 		Nuclei:     *nuclei,
 		UserAgent:  *ua,
 		Adapters:   adapters,
-		Log:        os.Stdout,
+		Log:        logw,
 	}
 	sessUsed, sessCookies, sessHeaders := false, 0, 0
 	if !*noSession {
@@ -865,7 +890,15 @@ func cmdRecon(args []string) int {
 	} else {
 		fmt.Println("session  skipped (--no-session)")
 	}
-	if *step {
+	if sink != nil {
+		// The workspace draws phases as they start; the kernel never waits on a
+		// keyboard here, it just reports. Cancelling the context aborts the run.
+		opts.Confirm = func(name, detail string) bool {
+			sink.SetPhase(name)
+			bus.Emit(progress.Event{Kind: progress.KindPhase, Phase: name, Text: detail})
+			return ctx.Err() == nil
+		}
+	} else if *step {
 		if !isTerminal(os.Stdin) {
 			fmt.Fprintln(os.Stderr, "kai: --step ignored (stdin is not a terminal)")
 		} else {
@@ -881,7 +914,10 @@ func cmdRecon(args []string) int {
 		"at": time.Now().UTC().Format(time.RFC3339),
 	})
 
-	sum, err := recon.Run(context.Background(), p, opts)
+	sum, err := recon.Run(ctx, p, opts)
+	if sink != nil {
+		sink.Flush()
+	}
 	if err != nil {
 		return fail(err)
 	}
