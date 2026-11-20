@@ -57,6 +57,16 @@ td.num, th.num { text-align: right; }
         padding: 1px 6px; font-size: 12px; color: #cfe0ff; }
 input[type=text] { background: #131a28; border: 1px solid #2b3a58; border-radius: 6px;
         color: #d8dee9; padding: 6px 8px; font: inherit; min-width: 200px; }
+pre.log { margin: 8px 0 0; padding: 8px 10px; max-height: 260px; overflow: auto;
+        background: #0a0e15; border: 1px solid #23304a; border-radius: 6px;
+        font-size: 12px; line-height: 1.5; white-space: pre-wrap; word-break: break-word; }
+pre.log .t { color: #6f7f99; }
+pre.log .k-phase { color: #ffc75c; }
+pre.log .k-counts { color: #9fb3d1; }
+pre.log .k-step { color: #b7c8e4; }
+pre.log .k-evidence, pre.log .k-finding { color: #7ce286; }
+pre.log .k-warn { color: #f7cd6c; }
+pre.log .k-error { color: #f07a7a; }
 .err { color: #f07a7a; }
 .ok { color: #7ce286; }
 </style>
@@ -75,16 +85,26 @@ input[type=text] { background: #131a28; border: 1px solid #2b3a58; border-radius
 </main>
 <script>
 var TOKEN_KEY = 'kai.token';
+var liveCtl = {};
 
 function tok() { return sessionStorage.getItem(TOKEN_KEY) || ''; }
 
-async function api(path) {
+function authHeaders() {
   var h = {};
   if (tok()) h.Authorization = 'Bearer ' + tok();
-  var r = await fetch(path, { headers: h, cache: 'no-store' });
+  return h;
+}
+
+function askToken() {
+  var v = prompt('kai serve token');
+  if (v) sessionStorage.setItem(TOKEN_KEY, v);
+  return !!v;
+}
+
+async function api(path) {
+  var r = await fetch(path, { headers: authHeaders(), cache: 'no-store' });
   if (r.status === 401) {
-    var v = prompt('kai serve token');
-    if (v) { sessionStorage.setItem(TOKEN_KEY, v); return api(path); }
+    if (askToken()) return api(path);
     throw new Error('unauthorized');
   }
   if (!r.ok) throw new Error(path + ' -> ' + r.status);
@@ -172,6 +192,87 @@ function scopeHTML(s) {
     (s.note ? ' <span class="err">' + esc(s.note) + '</span>' : '') + '</div>';
 }
 
+function eventHTML(ev) {
+  var at = String(ev.At || '');
+  var hhmmss = at.length >= 19 ? at.slice(11, 19) : '';
+  var kind = String(ev.Kind || '').replace(/[^a-z]/gi, '').toLowerCase() || 'log';
+  return '<div><span class="t">' + esc(hhmmss) + '</span> ' +
+    '<span class="k-' + esc(kind) + '">' + esc(ev.Text || '') + '</span></div>';
+}
+
+// The live panel is the only place the page follows a stream: it reads the same
+// recorded run the CLI writes, in order, with no polling and no writes back.
+function liveHTML(name) {
+  return '<h3 style="margin:12px 0 6px;font-size:12px;letter-spacing:.1em;color:#7f93b3">LIVE RUN</h3>' +
+    '<div><button data-live="' + esc(name) + '">watch live</button> ' +
+    '<button data-stoplive="' + esc(name) + '" style="display:none">stop</button> ' +
+    '<span class="dim" id="ls-' + esc(name) + '">not watching</span></div>' +
+    '<pre class="log" id="lv-' + esc(name) + '" style="display:none"></pre>';
+}
+
+function appendEvent(out, line) {
+  if (line.indexOf('data: ') !== 0) return; // comment/keepalive
+  var ev;
+  try { ev = JSON.parse(line.slice(6)); } catch (e) { return; }
+  out.insertAdjacentHTML('beforeend', eventHTML(ev));
+  out.scrollTop = out.scrollHeight;
+}
+
+function stopLive(name) {
+  if (liveCtl[name]) liveCtl[name].abort();
+}
+
+async function startLive(name) {
+  if (liveCtl[name]) return;
+  var out = document.getElementById('lv-' + name);
+  var st = document.getElementById('ls-' + name);
+  var start = document.querySelector('button[data-live="' + name + '"]');
+  var stop = document.querySelector('button[data-stoplive="' + name + '"]');
+  if (!out || !st || !start || !stop) return;
+  var ctl = new AbortController();
+  liveCtl[name] = ctl;
+  out.style.display = 'block';
+  out.innerHTML = '';
+  st.textContent = 'connecting...';
+  start.style.display = 'none';
+  stop.style.display = '';
+  try {
+    var r = await fetch('/api/v1/programs/' + encodeURIComponent(name) + '/watch',
+      { headers: authHeaders(), signal: ctl.signal, cache: 'no-store' });
+    if (r.status === 401 && askToken()) { delete liveCtl[name]; resetLive(name); return startLive(name); }
+    if (!r.ok) throw new Error('watch -> ' + r.status);
+    if (!r.body) throw new Error('this browser cannot stream a response');
+    st.innerHTML = '<span class="ok">live</span>';
+    var reader = r.body.getReader();
+    var dec = new TextDecoder();
+    var buf = '';
+    for (;;) {
+      var chunk = await reader.read();
+      if (chunk.done) break;
+      buf += dec.decode(chunk.value, { stream: true });
+      var lines = buf.split('\n');
+      buf = lines.pop();
+      for (var i = 0; i < lines.length; i++) appendEvent(out, lines[i]);
+    }
+    st.textContent = 'run finished — press refresh';
+  } catch (e) {
+    st.innerHTML = e && e.name === 'AbortError'
+      ? '<span class="dim">stopped</span>'
+      : '<span class="err">' + esc(e.message) + '</span>';
+  } finally {
+    delete liveCtl[name];
+    start.style.display = '';
+    stop.style.display = 'none';
+  }
+}
+
+function resetLive(name) {
+  var start = document.querySelector('button[data-live="' + name + '"]');
+  var stop = document.querySelector('button[data-stoplive="' + name + '"]');
+  if (start) start.style.display = '';
+  if (stop) stop.style.display = 'none';
+}
+
 async function openCard(name) {
   var card = document.querySelector('.card[data-name="' + name + '"]');
   var box = document.getElementById('d-' + name);
@@ -183,6 +284,7 @@ async function openCard(name) {
     box.innerHTML =
       '<h3 style="margin:2px 0 6px;font-size:12px;letter-spacing:.1em;color:#7f93b3">QUEUE</h3>' + queueHTML(d.queue) +
       '<h3 style="margin:12px 0 6px;font-size:12px;letter-spacing:.1em;color:#7f93b3">PLAN</h3>' + planHTML(d.plan) +
+      liveHTML(name) +
       '<h3 style="margin:12px 0 6px;font-size:12px;letter-spacing:.1em;color:#7f93b3">FINDINGS</h3>' + findingsHTML(d.findings) +
       '<h3 style="margin:12px 0 6px;font-size:12px;letter-spacing:.1em;color:#7f93b3">SCOPE</h3>' + scopeHTML(d.scope) +
       '<div style="margin-top:10px"><input type="text" placeholder="host or ip — check scope" id="q-' + esc(name) + '"> ' +
@@ -209,15 +311,25 @@ async function checkScope(name) {
   }
 }
 
+// One delegated listener for the whole page: card bodies are injected after the
+// first render, so wiring individual buttons at load time would miss them.
 function wire() {
-  document.querySelectorAll('.card > .head').forEach(function (h) {
-    h.addEventListener('click', function () { openCard(h.getAttribute('data-name')); });
+  document.addEventListener('click', function (ev) {
+    if (!ev.target || !ev.target.closest) return;
+    var b = ev.target.closest('button[data-live],button[data-stoplive],button[data-check]');
+    if (b) {
+      if (b.hasAttribute('data-live')) startLive(b.getAttribute('data-live'));
+      else if (b.hasAttribute('data-stoplive')) stopLive(b.getAttribute('data-stoplive'));
+      else checkScope(b.getAttribute('data-check'));
+      return;
+    }
+    var head = ev.target.closest('.card > .head');
+    if (head) openCard(head.getAttribute('data-name'));
   });
-  document.querySelectorAll('button[data-check]').forEach(function (b) {
-    b.addEventListener('click', function () { checkScope(b.getAttribute('data-check')); });
-  });
-  document.querySelectorAll('input[type=text]').forEach(function (i) {
-    i.addEventListener('keydown', function (ev) { if (ev.key === 'Enter') checkScope(i.id.slice(2)); });
+  document.addEventListener('keydown', function (ev) {
+    if (ev.key !== 'Enter' || !ev.target || !ev.target.closest) return;
+    var i = ev.target.closest('input[type=text]');
+    if (i && i.id.slice(0, 2) === 'q-') checkScope(i.id.slice(2));
   });
 }
 
@@ -242,6 +354,7 @@ document.getElementById('forget').addEventListener('click', function () {
   alert('token cleared — the next request asks again');
 });
 load();
+window.__kaiLive = startLive; // debug hook: open a run stream from the console or a test
 </script>
 </body>
 </html>

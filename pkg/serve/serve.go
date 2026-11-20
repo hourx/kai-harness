@@ -324,6 +324,8 @@ func (s *Server) programRoute(w http.ResponseWriter, r *http.Request, name, sub 
 		sv := s.scopeView(dir)
 		sv.check(host)
 		s.writeJSON(w, http.StatusOK, sv)
+	case "watch":
+		s.watch(w, r, dir)
 	default:
 		s.writeJSON(w, http.StatusNotFound, map[string]string{"error": "no such route: " + sub})
 	}

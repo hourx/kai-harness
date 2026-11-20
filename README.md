@@ -451,6 +451,7 @@ kill the workspace. `kai tui --demo` draws the layout without needing a terminal
 | `GET /api/v1/programs/<n>/queue?limit=N` | ranked queue (`limit` is clamped) |
 | `GET /api/v1/programs/<n>/scope?host=X` | the gate's verdict for one host, and why |
 | `GET /api/v1/programs/<n>/{brief,outcomes,evidence}` | brief, outcome ledger, evidence index |
+| `GET /api/v1/programs/<n>/watch` | Server-Sent Events: the run's recorded events, as they happen |
 
 It is read-only by construction: no endpoint runs a command or writes a file, so a
 published port cannot become a remote scan surface. Mutations stay in the CLI, where a
@@ -459,6 +460,17 @@ anything else requires a token (`--token auto` generates one, or set `KAI_SERVE_
 and the check happens before the listener opens, so a misconfiguration fails loudly
 instead of quietly serving a campaign to the network. `--addr 127.0.0.1:0` asks the
 kernel for a free port.
+
+`/watch` is the one endpoint that keeps a connection open, so a run can be followed
+while it happens instead of after it ends. It tails `state/progress.jsonl` — the same
+event log the CLI appends to — and pushes each new event as it is recorded: no polling
+loop in the client, no second code path, no writes. The default replays the events
+already in the file first, so a watcher that connects mid-run is not blind to the run
+so far; `?backlog=0` streams only what happens next. A comment line is sent every 15
+seconds so proxies do not close an idle stream, the write deadline is cleared for the
+life of the response, and at most 8 watchers can be open at once.
+
+The dashboard uses it: open a program card and press **watch live**.
 
 ---
 
@@ -475,7 +487,7 @@ the release binary; it would not turn `kai` into a library. For now, use
 
 ## Status
 
-Current line: `kai 0.14.0`.
+Current line: `kai 0.15.0`.
 
 | Version | Contents |
 |---|---|
@@ -488,6 +500,7 @@ Current line: `kai 0.14.0`.
 | v0.12 | engagement plan (`plan`), cross-program board (`board`), evidence capture, submission drafts, engine packages under `pkg/` |
 | v0.13 | split-pane terminal workspace, read-only `kai serve` service face |
 | v0.14 | platform drivers as embedded data, `state/program.yaml` program contract, `kai drivers` / `kai contract --audit` |
+| v0.15 | live run stream: `GET /api/v1/programs/<n>/watch` (SSE over the recorded event log) and the dashboard's `watch live` panel |
 
 `kai` is a context preparer and an evidence bookkeeper, not a hunting agent. The full design
 lives in [`SPEC.md`](SPEC.md); the improvement roadmap in [`IMPROVEMENT-PLAN.md`](IMPROVEMENT-PLAN.md).

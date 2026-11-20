@@ -526,8 +526,9 @@ Deviations from the original text, recorded so the plan stays honest:
 
 ## Next
 
-1. `kai serve` variants: a small `kai serve --watch` (SSE over `pkg/progress`) and a mobile-friendly
-   card layout were the two things the first live look asked for; neither blocks the driver work.
+1. Mobile-friendly card layout was the second thing the first live look asked for. The first half of
+   this item — `kai serve --watch`, the SSE stream over `pkg/progress` — shipped in v0.15.0: the run
+   is now followable while it happens, in the dashboard and from any HTTP client.
 2. Program archetypes on top of the driver manifests (HackerOne/Bugcrowd/self-hosted/Cantina shapes),
    and a reader for platforms whose policy is not plain HTML (Bugcrowd's API, an authenticated
    session) — the driver seam already names the reader, so this is registration, not core change.

@@ -332,7 +332,7 @@ func TestDashboardIsServed(t *testing.T) {
 		t.Fatalf("content-type = %s", ct)
 	}
 	body := rec.Body.String()
-	for _, want := range []string{"<title>kai", APIPrefix + "/board", "kai.token"} {
+	for _, want := range []string{"<title>kai", APIPrefix + "/board", "kai.token", "LIVE RUN", "data-live", "closest('button[data-live]"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("dashboard is missing %q", want)
 		}

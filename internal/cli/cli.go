@@ -866,18 +866,27 @@ func cmdRecon(args []string) int {
 	}
 
 	// A front-end (the split-pane workspace) may be watching this run and able to
-	// stop it. Both values are nil for every other caller, which leaves this
-	// command byte-for-byte what it was.
+	// stop it. When none is attached the run is still recorded, so a watcher
+	// (`kai serve`) can follow it and a later replay can read it.
 	bus, fctx := frontEnd()
+	front := bus != nil
+	if bus == nil {
+		bus = progress.NewBus(2048)
+	}
 	ctx := context.Background()
 	if fctx != nil {
 		ctx = fctx
 	}
-	var sink *progress.Writer
-	logw := io.Writer(os.Stdout)
-	if bus != nil {
-		sink = progress.NewWriter(bus)
-		logw = io.MultiWriter(os.Stdout, sink)
+	sink := progress.NewWriter(bus)
+	logw := io.Writer(io.MultiWriter(os.Stdout, sink))
+	if rec, err := progress.NewRecorder(p.StatePath("progress.jsonl")); err == nil {
+		stop := progress.Record(bus, rec)
+		defer func() {
+			sink.Flush()
+			stop()
+		}()
+	} else {
+		fmt.Fprintf(os.Stderr, "kai: progress log unavailable (%v)\n", err)
 	}
 
 	opts := recon.Options{
@@ -909,7 +918,7 @@ func cmdRecon(args []string) int {
 	} else {
 		fmt.Println("session  skipped (--no-session)")
 	}
-	if sink != nil {
+	if front {
 		// The workspace draws phases as they start; the kernel never waits on a
 		// keyboard here, it just reports. Cancelling the context aborts the run.
 		opts.Confirm = func(name, detail string) bool {
