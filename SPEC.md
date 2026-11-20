@@ -1,89 +1,90 @@
 # kai — SPEC v0.8
 
 Deterministic context-pack builder for bug bounty.
-Fase yang dikerjakan tool: **Program Selection (bantu) → Pre-Hunt (kumpulkan) → Recon → Mapping**.
-Sisanya (hunting, validasi, report) diserahkan ke Kairos.
+Phases the tool works on: **Program Selection (assist) → Pre-Hunt (collect) → Recon → Mapping**.
+The rest (hunting, validation, report) is handed to the downstream agent.
 
 ---
 
-## 1. Masalah
+## 1. Problem
 
-Bukti dari dua repo yang ada:
+Evidence from the two existing repos:
 
-| Fakta | Konsekuensi |
+| Fact | Consequence |
 |---|---|
-| `bounty-pack` = 276 SKILL.md, 104.442 baris, tanpa `audit-pipeline-orchestrator.py` / `pool_pick.py` / `reverify.py` | Pack itu **perpustakaan**, bukan pipeline. Agent menyimpulkan urutan sendiri → tiap run beda → tidak bisa diperbaiki |
-| Target diputar dari pool 35.550 domain, breadth-first | Hanya menemukan lapisan paling dangkal = lapisan yang sudah dipindai semua orang → **duplikat secara struktural** |
-| Kairos: `google-vrp` 411 attempts / 0 findings, `ticko` 29 / 0 | Usaha banyak, hasil nol: bukan kurang alat, tapi kurang konteks per target |
-| Tidak ada state lintas-run untuk aset mentah | Agent tidak tahu apa yang **baru** → mengulang permukaan yang sudah usang |
+| The skill pack = 276 SKILL.md, 104,442 lines, with no orchestrator / pool-picker / re-verify scripts | The pack is a **library**, not a pipeline. The agent infers the order itself → every run differs → cannot be improved |
+| Targets drawn from a pool of 35,550 domains, breadth-first | Only finds the shallowest layer = the layer everyone has already scanned → **structurally duplicate** |
+| Downstream campaigns: 411 attempts / 0 findings, 29 / 0 | Lots of effort, zero results: not a lack of tools, but a lack of per-target context |
+| There is no cross-run state for raw assets | The agent does not know what is **new** → it repeats surface that is already stale |
 
-**Kesimpulan:** yang hilang bukan tool recon baru. Yang hilang adalah **artefak konteks yang deterministik, kecil, dan membawa diff**.
-
----
-
-## 2. Ruang lingkup
-
-### Dikerjakan v0.1
-- `init` — intake program: scope, out-of-scope, policy, verdict
-- `scope` — gate IN/OUT identik dengan `Kairos/scripts/scope_check.py`
-- `pack` — bangun ZIP siap-serap ke `workspace/<program>/`
-- `status` — ringkasan semua program
-
-### Dikerjakan v0.2
-- `recon` — subdomain, DNS, HTTP probe, TLS/SAN, URL harvest, JS harvest
-- `diff` — bandingkan snapshot sekarang vs sebelumnya (`first_seen` / `last_seen`)
-
-### Dikerjakan v0.3
-- `session` — impor cookie/header dari HAR atau manual, dipakai recon, **tidak** masuk pack kecuali `--include-session`
-- `map` — modul, object reference, ID parameter, GraphQL, parameter liar dari JS
-- `next` — antrian tes terurut per kelas vuln, dengan bukti dan probe pertama
-
-### Dikerjakan v0.4
-- `intake` — Phase 0: baca halaman program HackerOne lewat GraphQL publik, skor go/careful/skip, scope + policy
-- `recon` menerima host eksak dari `scope.txt` (program tanpa wildcard tetap bisa direcon)
-
-### Dikerjakan v0.5
-- `intake` multi-sumber: H1 (GraphQL), Cantina, Immunefi, GitBook, meta, halaman mandiri
-- confidence `structured` vs `heuristic`; verdict `review` untuk hasil heuristic
-
-### Dikerjakan v0.6
-- `boundaries` — dokumen tunggal berisi aturan, batasan, dan kutipan verbatim in/out-of-scope
-
-### Dikerjakan v0.8
-- `analyze` — repo in-scope (opsional di-clone) + kontrak; workflow CI, manifest, entry point
-- hasil analisis masuk `map`/`next` dengan probe yang mematuhi batasan
-
-### Dikerjakan v0.9
-- `report` — laporan markdown/HTML per program
-
-### Bukan scope (selamanya)
-- Hunting otomatis (itu tugas Kairos + skill `hunt-*`)
-- Submit laporan otomatis ke platform
-- Menyimpan credential target di repo
+**Conclusion:** what is missing is not a new recon tool. What is missing is a **deterministic, small context artifact that carries a diff**.
 
 ---
 
-## 3. Kontrak integrasi dengan Kairos
+## 2. Scope
 
-Tool ini harus menghasilkan output yang **langsung** bisa dipakai `bugbounty-pipeline` tanpa penerjemahan.
+### Done in v0.1
+- `init` — program intake: scope, out-of-scope, policy, verdict
+- `scope` — IN/OUT gate identical to the downstream agent's `scripts/scope_check.py`
+- `pack` — build a ZIP ready to be absorbed into `workspace/<program>/`
+- `status` — summary of all programs
 
-### 3.1 Semantik scope (wajib identik)
+### Done in v0.2
+- `recon` — subdomains, DNS, HTTP probe, TLS/SAN, URL harvest, JS harvest
+- `diff` — compare the current snapshot against the previous one (`first_seen` / `last_seen`)
 
-Disalin dari `Kairos/scripts/scope_check.py`:
+### Done in v0.3
+- `session` — import cookie/header from HAR or manually, used by recon, **not** included in the pack unless `--include-session`
+- `map` — modules, object references, ID parameters, GraphQL, loose parameters from JS
+- `next` — test queue ordered per vuln class, with evidence and a first probe
+- `outcome` — record what a target turned out to be into `state/outcomes.jsonl`; `next` reads it back and re-ranks (see 4.5)
 
-| Input | Aturan |
+### Done in v0.4
+- `intake` — Phase 0: read the HackerOne program page over the public GraphQL, score go/careful/skip, scope + policy
+- `recon` accepts exact hosts from `scope.txt` (a program without wildcards can still be recon'd)
+
+### Done in v0.5
+- multi-source `intake`: H1 (GraphQL), Cantina, Immunefi, GitBook, meta, standalone pages
+- `structured` vs `heuristic` confidence; a `review` verdict for heuristic results
+
+### Done in v0.6
+- `boundaries` — a single document with the rules, constraints and verbatim in/out-of-scope quotes
+
+### Done in v0.8
+- `analyze` — in-scope repos (optionally cloned) + contracts; CI workflows, manifests, entry points
+- analysis results feed `map`/`next` with probes that respect the constraints
+
+### Done in v0.9
+- `report` — markdown/HTML report per program
+
+### Out of scope (forever)
+- Automated hunting (that is the downstream agent's job, together with its hunting skills)
+- Automatic report submission to the platform
+- Storing target credentials in the repo
+
+---
+
+## 3. Integration contract with the downstream agent
+
+The tool must produce output that the downstream pipeline can use **directly**, with no translation.
+
+### 3.1 Scope semantics (must be identical)
+
+Copied from the downstream agent's `scripts/scope_check.py`:
+
+| Input | Rule |
 |---|---|
 | `api.example.com` | exact match |
-| `*.example.com` | cocok untuk `a.example.com` dan `a.b.example.com`, **tidak** cocok untuk `example.com` |
+| `*.example.com` | matches `a.example.com` and `a.b.example.com`, does **not** match `example.com` |
 | `203.0.113.0/24` | CIDR containment |
-| `out-of-scope.txt` | **selalu menang** atas `scope.txt` |
-| `scope.txt` kosong / tidak ada | **refuse** (exit 2) |
+| `out-of-scope.txt` | **always wins** over `scope.txt` |
+| `scope.txt` empty / missing | **refuse** (exit 2) |
 
-Exit code: `0` = IN, `1` = OUT, `2` = salah pakai.
+Exit code: `0` = IN, `1` = OUT, `2` = misuse.
 
-Setiap keputusan ditulis append ke `audit.log`.
+Every decision is written append-only to `audit.log`.
 
-### 3.2 Layout workspace yang diharapkan Kairos
+### 3.2 Workspace layout expected by the downstream agent
 
 ```
 workspace/<program>/
@@ -97,7 +98,7 @@ workspace/<program>/
 └── findings/
 ```
 
-Nama file artefak yang dibaca `bugbounty-pipeline`:
+Artifact filenames read by the downstream pipeline:
 
 ```
 recon/subs.txt      recon/live.txt      recon/urls.txt
@@ -106,11 +107,11 @@ recon/ranked.txt    recon/smuggling.txt
 LEDGER.md
 ```
 
-Catatan: pipeline menyebut folder `targets-<name>/`; kai memakai `recon/` (konvensi `docs/BUG-BOUNTY.md`) dan **memetakan namanya di `BRIEF.md`**.
+Note: the pipeline calls the folder `targets-<name>/`; kai uses `recon/` (the bug-bounty runbook's convention) and **maps the name in `BRIEF.md`**.
 
-### 3.3 Toolchain VPS (dari `docs/BUG-BOUNTY.md`)
+### 3.3 VPS toolchain (from the bug-bounty runbook)
 
-Kalau ada, dipakai sebagai adapter. Kalau tidak, fallback internal.
+If present, used as an adapter. If not, an internal fallback.
 
 ```
 subfinder assetfinder dnsx httpx naabu katana gau waybackurls
@@ -118,86 +119,86 @@ ffuf nuclei dalfox anew notify interactsh-client
 SecLists: /opt/wordlists/SecLists
 ```
 
-### 3.4 Kontrak Phase 0 (intake)
+### 3.4 Phase 0 contract (intake)
 
-Sumber: `POST https://hackerone.com/graphql` ( publik, tanpa login ). Satu query
-metadata + policy + reward, satu query scope dengan paginasi 100.
+Source: `POST https://hackerone.com/graphql` ( public, no login ). One query for
+metadata + policy + reward, one scope query paginated by 100.
 
-| Data platform | Dipakai untuk |
+| Platform data | Used for |
 |---|---|
-| `handle`, `name`, `state`, `submission_state`, `offers_bounties` | identitas + verdict |
-| `top/average_bounty_*`, `bounty_table_rows` | komponen money |
-| `reports_received_last_90_days`, `resolved_report_count`, `profile_metrics_snapshot` | komponen crowding + "di mana report jatuh" |
-| `response_efficiency_percentage` | komponen speed |
-| `structured_scopes` (asset_type, eligibility, max_severity, instruction) | scope.txt + scope + komponen surface |
-| `policy` | policy.md — aturan yang tidak bisa diwakili host |
+| `handle`, `name`, `state`, `submission_state`, `offers_bounties` | identity + verdict |
+| `top/average_bounty_*`, `bounty_table_rows` | money component |
+| `reports_received_last_90_days`, `resolved_report_count`, `profile_metrics_snapshot` | crowding component + "where reports land" |
+| `response_efficiency_percentage` | speed component |
+| `structured_scopes` (asset_type, eligibility, max_severity, instruction) | scope.txt + scope + surface component |
+| `policy` | policy.md — rules that cannot be represented as a host |
 
-Pemetaan scope sengaja konservatif: `URL` → host, `WILDCARD` → `*.`, `CIDR` →
-CIDR. **URL dengan path tidak dijadikan aturan host** karena gate hanya
-memahami host; melebarkan `example.com/api/*` menjadi `example.com` akan
-mengizinkan pengujian di luar izin program. Aset non-web (app ID, contract,
-source, hardware) tercatat di intake.json dan scorecard, tidak ditebak sebagai host.
+The scope mapping is deliberately conservative: `URL` → host, `WILDCARD` → `*.`,
+`CIDR` → CIDR. **A URL with a path is not turned into a host rule** because the
+gate only understands hosts; widening `example.com/api/*` to `example.com` would
+allow testing outside the program's permission. Non-web assets (app ID, contract,
+source, hardware) are recorded in intake.json and the scorecard, not guessed as a host.
 
-Sumber non-H1 dibaca dari teks halaman (GitBook memakai varian `.md`). Karena
-regex tidak bisa membedakan contoh dari aturan, hasilnya berlabel
-`confidence: heuristic` dan verdictnya selalu `review`. Host yang ditemukan
-dekat heading "in scope" masuk `candidate_assets`, **tidak** langsung ke
-`scope.txt`. Operator memverifikasi lalu memakai `--trust-scope` untuk
-mempromosikannya; ini tercatat di comment `scope.txt`.
+Non-H1 sources are read from page text (GitBook uses the `.md` variant). Because a
+regex cannot tell an example from a rule, the result is labelled
+`confidence: heuristic` and its verdict is always `review`. Hosts found
+near an "in scope" heading go into `candidate_assets`, **not** directly into
+`scope.txt`. The operator verifies them and then uses `--trust-scope` to
+promote them; this is recorded in a comment in `scope.txt`.
 
-Sumber non-H1 juga mengikuti link dokumen relevan dari halaman utama (testnet,
-reward, submission, security, faucet) di domain yang sama, maksimal 8 halaman.
-Teks gabungannya dipakai untuk semua ekstraksi. Host yang ditemukan di halaman
-referensi tetap berstatus kandidat sampai diverifikasi operator.
+Non-H1 sources also follow relevant document links from the main page (testnet,
+reward, submission, security, faucet) on the same domain, at most 8 pages.
+The combined text is used for all extraction. Hosts found on reference pages
+stay candidates until verified by the operator.
 
-Data yang diekstrak dari teks: reward per severity (termasuk `<1M USDC`),
-"Maximum Bounty/Max payout", jumlah findings/paid reports, constraint testing
-(no-mainnet, PoC, KYC, disclosure), dan aset yang disebut di bagian scope.
-Kalau jumlah report tidak dipublikasikan, komponen crowding dinilai
-"unknown" (17/35), bukan "kompetisi nol".
+Data extracted from the text: reward per severity (including `<1M USDC`),
+"Maximum Bounty/Max payout", number of findings/paid reports, testing constraints
+(no-mainnet, PoC, KYC, disclosure), and the assets mentioned in the scope section.
+If the number of reports is not published, the crowding component is scored
+"unknown" (17/35), not "zero competition".
 
 ---
 
-## 4. Arsitektur
+## 4. Architecture
 
-### 4.1 Dua mode
+### 4.1 Two modes
 
-| Mode | Perilaku |
+| Mode | Behaviour |
 |---|---|
-| `--auto` | jalan lurus `init → recon → map → pack`, tanpa prompt. Untuk VPS/cron |
-| `--step` | berhenti tiap tahap, tampilkan temuan + alasan + perintah berikutnya, tunggu Enter. Mode belajar |
+| `--auto` | runs straight through `init → recon → map → pack`, no prompt. For VPS/cron |
+| `--step` | stops at each stage, shows findings + reasoning + the next command, waits for Enter. Learning mode |
 
-### 4.2 Self-contained + adapter
+### 4.2 Self-contained + adapters
 
-Inti ditulis dengan **stdlib Go saja** (tanpa cgo, tanpa dependency eksternal):
+The core is written with the **Go standard library only** (no cgo, no external dependencies):
 
-- parsing scope, HTTP client, TLS handshake, DNS, parse JS via regex, tulis ZIP, state JSONL
+- scope parsing, HTTP client, TLS handshake, DNS, JS parsing via regex, ZIP writing, JSONL state
 
-Adapter opsional: kalau binary eksternal ada di `PATH`, dipakai untuk hasil yang lebih kaya:
+Optional adapters: if an external binary is on `PATH`, it is used for richer results:
 
 ```
 subfinder → subs.txt        httpx → live.txt        katana → urls.txt
-gau       → urls.txt (historis)   nuclei → nuclei.txt
+gau       → urls.txt (historical)   nuclei → nuclei.txt
 ```
 
-Kalau tidak ada, tool tetap jalan dengan sumber internal (crt.sh, HTTP GET, crawl sederhana).
+If none are present, the tool still runs on internal sources (crt.sh, HTTP GET, a simple crawl).
 
-### 4.3 Struktur repo
+### 4.3 Repo structure
 
 ```
 kai/
 ├── cmd/kai/main.go
 ├── internal/
-│   ├── cli/          dispatch perintah
+│   ├── cli/          per-command dispatch
 │   ├── scope/        parse + match + gate
-│   ├── workspace/    layout program, meta, audit log
+│   ├── workspace/    program layout, meta, audit log
 │   ├── pack/         zip builder + BRIEF + MANIFEST
 │   └── version/
 ├── SPEC.md
-└── data/             (gitignored) state tiap program
+└── data/             (gitignored) per-program state
 ```
 
-State di `data/<program>/`, terpisah dari repo Kairos. `pack` yang menjembatani.
+State lives in `data/<program>/`, separate from the downstream agent's repo. `pack` is the bridge.
 
 ### 4.4 Data model per program
 
@@ -208,93 +209,104 @@ data/<program>/
 ├── scope.txt
 ├── out-of-scope.txt
 ├── audit.log
-├── intake.json       data Phase 0 + scorecard + boundaries (terstruktur)
-├── boundaries.md     aturan + batasan + kutipan verbatim in/out-of-scope
-├── nonweb.json       hasil analyze (repo + kontrak)
-├── nonweb.md         ringkasan analisis non-web
-├── rules-diff.json   delta aturan vs intake sebelumnya
-├── rules-diff.md     delta yang dibaca agent
-├── intakes/<ts>/     snapshot intake + boundaries + policy
-├── policy.md         kebijakan program (class out-of-scope, header wajib)
-├── session.json      cookie + header (0600, tidak ikut pack kecuali diminta)
-├── assets.json       hosts, endpoints, JS hash (dengan first_seen/last_seen)
-├── repos/            clone repo (hanya lewat analyze --clone)
-├── diff.json         delta vs snapshot sebelumnya
-├── diff.md           delta dalam bentuk yang dibaca agent
-├── map.json  map.md  modul, object reference, ID parameter, GraphQL
-├── next.json next.md antrian tes + alasan + probe pertama
+├── intake.json       Phase 0 data + scorecard + boundaries (structured)
+├── boundaries.md     rules + constraints + verbatim in/out-of-scope quotes
+├── nonweb.json       analyze results (repos + contracts)
+├── nonweb.md         non-web analysis summary
+├── rules-diff.json   rule delta vs the previous intake
+├── rules-diff.md     delta read by the agent
+├── intakes/<ts>/     intake + boundaries + policy snapshot
+├── policy.md         program policy (out-of-scope classes, required headers)
+├── session.json      cookie + header (0600, not packed unless requested)
+├── assets.json       hosts, endpoints, JS hashes (with first_seen/last_seen)
+├── repos/            cloned repos (only via analyze --clone)
+├── diff.json         delta vs the previous snapshot
+├── diff.md           delta in the form the agent reads
+├── map.json  map.md  modules, object references, ID parameters, GraphQL
+├── next.json next.md test queue + reasons + first probe
 ├── state/
 │   ├── subs.txt      live.txt  live_urls.txt  urls.txt
 │   ├── js.ts         endpoints.txt  ranked.txt  nuclei.txt
-│   └── (kondisi terkini, siap di-pack)
+│   └── (current condition, ready to pack)
 └── snapshots/
     └── <ts>/assets.json
 ```
 
-### 4.5 Skor antrian (`next`)
+### 4.5 Queue score (`next`)
 
-`next` tidak mengirim request. Ia hanya menimbang bukti yang sudah ada:
+`next` does not send requests. It only weighs evidence that already exists:
 
-| Sinyal | Bobot | Alasan |
+| Signal | Weight | Reason |
 |---|---:|---|
-| endpoint baru sejak snapshot sebelumnya | +100 | paling kecil kemungkinan sudah dipindai orang lain |
-| object reference di path atau ID parameter | +50 | kandidat IDOR/BOLA, bug berbayar paling umum |
-| kelas bisnis (billing/auth/admin/upload) | +45…60 | alur uang dan identitas |
-| punya parameter | +15 | ada yang bisa diubah |
-| host 401/403 + nama subdomain sensitif | +45…65 | area yang jelas butuh login |
-| parameter liar dari JS | +30…55 | petunjuk request mana yang harus dibaca |
+| endpoint new since the previous snapshot | +100 | least likely to have been scanned by others |
+| object reference in the path or an ID parameter | +50 | IDOR/BOLA candidates, the most common paid bug |
+| business class (billing/auth/admin/upload) | +45...60 | money and identity flows |
+| has parameters | +15 | something can be changed |
+| host 401/403 + a sensitive subdomain name | +45...65 | areas that clearly require login |
+| loose parameters from JS | +30...55 | a hint at which request to read |
 
-Batas bawah: item `surface-review` dengan skor < 30 dibuang. Kalau tidak ada yang lolos, `next.md` bilang terus terang bahwa itu hasil, bukan kegagalan run.
+Lower bound: `surface-review` items scoring < 30 are dropped. If nothing passes, `next.md` says plainly that this is the result, not a failed run.
+
+Outcome-driven re-ranking (current spec). `next` also reads the outcome log
+`state/outcomes.jsonl` written by `kai outcome`, and re-ranks the queue
+deterministically — same log, same surface, same plan:
+
+- a target classified **after** the last surface change is dropped from the queue, not merely demoted: a `negation` or `informational` is not worth a slot;
+- a stale classification (the surface changed since) stays with a penalty and a note — `negation` -20, `informational` -10 — so a change can never hide untested work;
+- a target that yielded (`finding` / `reported` / `paid`) is lifted +40, and its cluster siblings +20 — the same object root usually means the same bug;
+- an unparseable timestamp counts as stale, so a corrupt log cannot hide anything.
+
+Freshness is measured against the last surface change (the newest mtime among the recon artifacts), not the wall clock.
 
 ---
 
-## 5. Isi ZIP
+## 5. ZIP contents
 
 ```
 <program>_<ts>.zip
 └── <program>/
-    ├── BRIEF.md               ← 1 halaman untuk agent: scope, isi pack, yang hilang, next action
+    ├── BRIEF.md               ← 1 page for the agent: scope, pack contents, what's missing, next action
     ├── program.md
     ├── scope.txt
     ├── out-of-scope.txt
-    ├── boundaries.md          ← aturan + batasan, kutipan verbatim
-    ├── policy.md              ← aturan program yang bukan host
-    ├── LEDGER.md              ← log keputusan tool
-    ├── recon/                 ← hanya file yang ada
+    ├── boundaries.md          ← rules + constraints, verbatim quotes
+    ├── policy.md              ← program rules that are not host-based
+    ├── LEDGER.md              ← the tool's decision log
+    ├── recon/                 ← only the files that exist
     │   ├── subs.txt
     │   ├── live.txt
     │   ├── urls.txt
     │   ├── js.ts
     │   ├── endpoints.txt
     │   └── nuclei.txt
-    └── bountykit/           ← kontrak internal, bukan nama produk
-        ├── MANIFEST.json      ← daftar file + sha256
-        ├── intake.json        ← Phase 0 (skor + alasan)
-        ├── rules-diff.md      ← perubahan aturan
-        ├── nonweb.md  nonweb.json  ← analisis repo/kontrak
-        ├── diff.md            ← apa yang baru
-        ├── map.md  map.json   ← peta permukaan
-        ├── next.md next.json  ← antrian tes terurut
-        └── session.json       ← hanya dengan --include-session
+    └── bountykit/           ← internal contract, not a product name
+        ├── MANIFEST.json      ← file list + sha256
+        ├── intake.json        ← Phase 0 (score + reasons)
+        ├── rules-diff.md      ← rule changes
+        ├── nonweb.md  nonweb.json  ← repo/contract analysis
+        ├── diff.md            ← what is new
+        ├── map.md  map.json   ← surface map
+        ├── next.md next.json  ← ordered test queue
+        └── session.json       ← only with --include-session
 ```
 
-Prinsip: **distilled by default**. Agent Kairos punya RAM terbatas dan `RTK` memotong output >500 karakter — dump mentah merusak konteks. `--include-raw` hanya kalau diminta.
+Principle: **distilled by default**. The downstream agent has limited RAM and `RTK` truncates output >500 characters — a raw dump ruins the context. `--include-raw` only on request.
 
 ---
 
-## 6. Desain anti-duplikat
+## 6. Anti-duplicate design
 
-Tiga mekanisme, semuanya di tool:
+Three mechanisms, all in the tool:
 
-1. **`first_seen` / `last_seen` per aset.** Aset yang muncul di snapshot ke-N dan tidak ada di N-1 = permukaan **segar** → prioritas tertinggi.
-2. **Hash JS bundle.** Bundle yang berubah = endpoint baru kemungkinan besar ada di sana.
-3. **`diff` wajib masuk BRIEF.md.** Agent membaca "APA YANG BARU", bukan seluruh semesta aset.
+1. **`first_seen` / `last_seen` per asset.** An asset that appears in snapshot N and was absent in N-1 = **fresh** surface → top priority.
+2. **JS bundle hash.** A changed bundle = new endpoints most likely live there.
+3. **`diff` must go into BRIEF.md.** The agent reads "WHAT IS NEW", not the whole asset universe.
 
-Alasan: automation selalu kalah cepat pada permukaan lama. Diff adalah satu-satunya lever yang membuat automation menghasilkan sesuatu yang belum dipindai orang lain.
+Reason: automation always loses the speed race on old surface. Diff is the only lever that makes automation produce something nobody else has scanned.
 
 ---
 
-## 7. Perintah
+## 7. Commands
 
 ```
 kai version
@@ -317,6 +329,7 @@ v0.3:
 kai session <program> [show|set|clear] [--har f] [--cookie s] [--header 'K: V']
 kai map    <program>
 kai next   <program>
+kai outcome <program> --status negation|informational|finding|reported|paid [--class C] [--note T] <target...>
 kai pack   <program> [--include-session]
 ```
 
@@ -324,9 +337,9 @@ v0.4:
 
 ```
 kai intake <hackerone-url|handle> [--name slug] [--dry-run] [--force]
-kai analyze <program> [--clone] [--refresh]        # repo + kontrak in-scope
-kai rules-diff <program>                   # delta aturan antar-intake
-kai boundaries <program>                   # aturan + batasan + verbatim
+kai analyze <program> [--clone] [--refresh]        # in-scope repos + contracts
+kai rules-diff <program>                   # rule delta between intakes
+kai boundaries <program>                   # rules + constraints + verbatim
 kai intake <url> [--name slug] [--dry-run] [--force] [--trust-scope]
                       [--max-links N] [--no-follow]
 ```
@@ -339,32 +352,32 @@ kai report <program>
 
 ---
 
-## 8. Aturan keras
+## 8. Hard rules
 
-1. `scope.txt` kosong → refuse. Tidak ada pengecualian.
-2. Out-of-scope selalu menang.
-3. Setiap host yang akan disentuh wajib lewat `scope` dulu; setiap hasil masuk `audit.log`.
-4. Tidak ada credential, cookie, atau token di dalam ZIP kecuali lewat `--include-session`; tool mencetak peringatan saat itu terjadi.
-5. ZIP tidak pernah masuk git. `data/` dan `dist/` gitignored.
-6. `session.json` mode 0600, dan `session show` selalu menutupi nilai rahasia.
-7. Cookie/header session hanya dikirim ke host yang lolos gate — bukan ke layanan CT, CDN, atau host referensi.
-7. `intake` hanya membaca API publik platform: tidak login, tidak menyentuh aset target.
-8. Aset berskope path tidak pernah dilebarkan jadi aturan host.
-9. Host dari teks halaman tetap jadi kandidat sampai operator memverifikasi dan memakai `--trust-scope`.
-10. Aturan yang tidak dipublikasikan = `unknown` / "not stated", bukan izin. Kutipan out-of-scope wajib masuk `boundaries.md` apa adanya.
-11. Setiap intake di-snapshot. Perubahan scope atau policy wajib muncul di `rules-diff.md` dan `BRIEF.md`.
-12. Aset non-web yang out-of-scope tidak pernah masuk antrian `next`.
-13. `analyze --clone` hanya menyentuh repo yang tercantum di scope; clone disimpan di `data/` dan tidak pernah di-pack.
-14. `intake` hanya mengikuti link relevan di domain yang sama, maksimal `--max-links` halaman (default 8). Referensi tambahan tetap menghasilkan kandidat yang belum diverifikasi.
+1. Empty `scope.txt` → refuse. No exceptions.
+2. Out-of-scope always wins.
+3. Every host to be touched must pass through `scope` first; every result goes into `audit.log`.
+4. No credential, cookie or token inside the ZIP except via `--include-session`; the tool prints a warning when that happens.
+5. The ZIP never goes into git. `data/` and `dist/` are gitignored.
+6. `session.json` is mode 0600, and `session show` always masks secret values.
+7. Session cookies/headers are sent only to hosts that pass the gate — not to CT services, CDNs or reference hosts.
+7. `intake` only reads the platform's public API: no login, it does not touch the target's assets.
+8. Path-scoped assets are never widened into host rules.
+9. Hosts from page text stay candidates until the operator verifies them and uses `--trust-scope`.
+10. An unpublished rule = `unknown` / "not stated", not permission. Out-of-scope quotes must go into `boundaries.md` verbatim.
+11. Every intake is snapshotted. Any change to scope or policy must show up in `rules-diff.md` and `BRIEF.md`.
+12. Out-of-scope non-web assets never enter the `next` queue.
+13. `analyze --clone` only touches repos listed in scope; clones are stored in `data/` and never packed.
+14. `intake` only follows relevant links on the same domain, at most `--max-links` pages (default 8). Additional references still yield unverified candidates.
 
 ---
 
 ## 9. Roadmap
 
-| Versi | Isi | Definisi selesai |
+| Version | Contents | Definition of done |
 |---|---|---|
-| v0.1 | `init`, `scope`, `pack`, `status` | ZIP bisa dibuat, gate identik dengan Kairos (diuji), agent bisa membaca BRIEF |
-| v0.2 | `recon`, `diff`, snapshot | Satu run menghasilkan `subs/live/urls/js/endpoints`; diff terisi — **selesai** |
-| v0.3 | `map`, `next`, session import | Antrian tes terurut + hipotesis per kelas vuln, permukaan auth ikut terpetakan — **selesai** |
-| v0.8 | `analyze` repo/kontrak | CI workflow + manifest masuk queue, probe patuh batasan — **selesai** |
-| v0.9 | `report`, adapter penuh | Laporan markdown/HTML per program |
+| v0.1 | `init`, `scope`, `pack`, `status` | A ZIP can be built, the gate is identical to the downstream agent's (tested), the agent can read BRIEF |
+| v0.2 | `recon`, `diff`, snapshots | One run produces `subs/live/urls/js/endpoints`; diff is filled — **done** |
+| v0.3 | `map`, `next`, session import | Ordered test queue + a hypothesis per vuln class, the auth surface is mapped too — **done** |
+| v0.8 | `analyze` repos/contracts | CI workflow + manifest enter the queue, probes respect the constraints — **done** |
+| v0.9 | `report`, full adapters | Markdown/HTML report per program |
