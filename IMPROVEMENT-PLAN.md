@@ -202,8 +202,13 @@ the pack against the declared schema; the bb-* skills read the manifest instead 
 4. Sprint 2, then Sprint 3, then Sprint 4.
 5. Platform drivers + `state/program.yaml` (§11): HackerOne → Bugcrowd → self-hosted (security.txt).
 6. `model.json` + the five sweeps (§9), spiked on one real program before it generalises.
-7. Pattern library, two layers (§9.3) + external adapter seam (§12).
-8. LLM seam last (§12) — the kernel must be useful with the LLM switched off.
+7. Coverage ledger + exploration rows derived from that model (§9.1, §15.1–15.2) — the two rows that
+   make "what was never touched" and "what was tried, and why" answerable with no database.
+8. HAR import: a captured browser or proxy session becomes evidence in bulk (§15.5).
+9. Pattern library, two layers (§9.3) + external adapter seam (§12).
+10. Shadow lesson loop (§15.4) — proposals only; adoption is one explicit operator action, rollback is
+    a pointer change.
+11. LLM seam last (§12) — the kernel must be useful with the LLM switched off.
 
 End state: kai becomes the deterministic spine of the pipeline —
 intake → scope → recon (deep, resumable) → plan (hypotheses) → [agent tests] → evidence →
@@ -295,10 +300,18 @@ invariants:   [{id, statement, check, domain: state|authz|value|rate|tenancy, so
 boundaries:   [{id, kind: auth|tenancy|chain|service|client, inside, outside, source}]
 value_flows:  [{from, to, asset, fee_rule, source}]
 anomalies:    [{id, kind, observation, evidence_ref}]
+coverage:     [{asset, tested: yes|no|partial, last_intent, evidence_ref, last_ts}]
+exploration:  [{id, intent, target, action_class, outcome: tried|produced|blocked|dead, produced[], why, evidence_ref, ts}]
 ```
 
 Every row carries `source` and `confidence` (`spec` | `observed` | `inferred`). A row with no source is
 a hypothesis, not part of the model, and the sweeps must treat it that way.
+
+`coverage` and `exploration` are the two rows that make the model *operational* rather than
+descriptive: coverage answers **what has not been touched**, exploration answers **what was tried and
+why**. Both are derived — from the evidence index, `state/plan.json` and `state/outcomes.jsonl` —
+never hand-typed, and both are anchored to `entities`/`actions` rows so the attempt, the traffic and
+the finding stay on one line.
 
 ### 9.2 The five deterministic sweeps — this is "notice what others miss"
 
@@ -319,6 +332,12 @@ All five read only `model.json` (+ evidence refs) and emit hypotheses in the exi
 5. **Model-anomaly sweep** — endpoints that do not follow the program's own convention, objects
    addressed by two different key types, list endpoints filtered while the detail endpoint is not,
    undocumented verbs/verbs with no matching action row.
+
+The five sweeps stay five: each one *derives* hypotheses, and none of them needs a database. Coverage
+is a different axis — it **orders** the queue instead of adding to it. A hypothesis whose rows sit on
+an asset still marked `tested: no` outranks one on an asset probed this week, and in-scope assets with
+no coverage row are printed as their own list, so "never touched" can never be invisible. A sort key,
+not a sixth sweep.
 
 ### 9.3 Pattern knowledge, keyed by shape — not by URL
 
@@ -482,6 +501,41 @@ finds it; `go install` alone writes to `$GOPATH/bin`, which is not on root's PAT
 
 
 
+## 15. Prior art surveyed — ARTEX (2026-11-21)
+
+`github.com/BaaRai/ARTEX` — AGPL-3.0, 13.3k stars / 5.3k forks / 1,033 commits / 42 open issues,
+Go + Next.js, created 2026-10-08 and pushed the day it was surveyed. It is the English continuation of
+the now-private upstream `Autumn-27/ARTEX` (history rewritten, `"fork": false`). Measured: 955 files /
+14.8 MB — 613 Go files, 5.25 MB of Next.js UI, and **2.9 MB of screenshots (19.7% of the payload)**;
+test files concentrated in `server/` (123), `db/` (77), `agent/` (66).
+
+It is the opposite trade to this plan, taken seriously: self-hosted, PostgreSQL, a recording MITM
+proxy, a MV3 browser extension, the scanner toolchain baked into the image (`nmap nuclei httpx katana
+ffuf dalfox sqlmap`), an LLM planner dispatching tool runs, a closed write-back loop into two graphs,
+and brakes (approval gate, argv-prefix rules, scope/deny gate, token + turn budgets, output framing
+against prompt injection). Its `RSI.md` is a three-loop self-improvement contract whose second and
+third loops are contracted *before* they exist.
+
+Verdict: **useful as evidence the architecture is right, not as a dependency.** Six things it does
+that kai does not, placed where each already fits this plan:
+
+| # | Borrowed idea | Lands in | Why it is a gap here |
+|---|---|---|---|
+| 15.1 | **Coverage ledger** — in-scope assets marked tested / untested, with the intents and evidence attached | `model.json` `coverage[]` (§9.1) + the ordering rule in §9.2 | kai knows what is in scope and what was found, but nothing says what was **never touched**. Cheapest source of missed findings there is. |
+| 15.2 | **Exploration graph** — what was tried, what it produced, why — kept separate from what is known about the target | `model.json` `exploration[]` (§9.1) | `plan.json` + `outcomes.jsonl` already hold the raw material; nothing reconstructs the attempt history, so a dead end is re-walked. |
+| 15.3 | **Findings bound to the traffic that justifies them** | `pkg/evidence` — add the request/response pairing invariant | `evidence.Item` already carries host/method/path/status/headers/body hash/blob and a `finding_id`. Missing: a check that a finding's evidence is *paired and complete* before a report can cite it. |
+| 15.4 | **Evidence-gated lessons, adopted only by an explicit owner action** (their loop-C contract) | new: shadow lesson loop, after the pattern library | Matches the operator's own rule: nothing auto-adopts, nothing self-modifies, rollback stays a pointer change. |
+| 15.5 | **HAR 1.2 import/export** of captured traffic | Tier 2 recon depth, beside evidence capture | The operator already owns browser and proxy captures; today they enter the index one file at a time. |
+| 15.6 | **Release provenance** — `SHA256SUMS` + `gh attestation verify` | Tier 3 distribution | CI exists; signed, verifiable artifacts do not. |
+
+**Not copied, on purpose:** PostgreSQL, the Docker scanner toolchain, a Next.js UI embedded with
+`go:embed`, megabytes of screenshots in the tree, and any LLM in the execution path. Every one of those
+buys capability kai deliberately refuses in exchange for one `go install` from a public proxy with a
+zero-dependency kernel. Their measured tree is 14.8 MB; kai's whole surface is ~16 packages, 210 test
+functions and no external deps.
+
+---
+
 ## Status — what has landed
 
 | Item | State |
@@ -532,8 +586,11 @@ workstream of its own, and nothing here is mobile-first.
 1. Program archetypes on top of the driver manifests (HackerOne/Bugcrowd/self-hosted/Cantina shapes),
    and a reader for platforms whose policy is not plain HTML (Bugcrowd's API, an authenticated
    session) — the driver seam already names the reader, so this is registration, not core change.
-2. Program model and archetypes on top of the surface store, then invariant testing.
-3. LLM planner seam — proposes into `plan.json`, never executes.
+2. Program model on top of the surface store, then the coverage ledger and exploration rows (§9.1,
+   §15.1–15.2), then the evidence pairing check (§15.3), then invariant testing.
+3. HAR import into the evidence store (§15.5) — one captured session, bulk evidence.
+4. Shadow lesson loop (§15.4): propose, never apply.
+5. LLM planner seam — proposes into `plan.json`, never executes.
 
 **Deferred, not next:** a mobile-friendly card layout for the dashboard. The live stream that landed
 in v0.15.0 is already usable from any HTTP client, so a phone layout buys nothing while the CLI is
