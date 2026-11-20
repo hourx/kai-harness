@@ -48,6 +48,8 @@ Commands:
                                                              create workspace
   intake  <url|handle> [--name slug] [--dry-run] [--force] [--trust-scope]
                     [--max-links N] [--no-follow]                Phase 0: read program
+  drivers [<url>] [--json]                                   which platform claims this target
+  contract <program> [--json] [--audit]                       the contract of record (state/program.yaml)
   boundaries <program>                                      print scope limits & rules
   brief    <program> [--out file]                            compact context card (~300 tokens)
   track    <program> list|submit|status|payout|retest        submission & triage ledger
@@ -119,6 +121,10 @@ func Run(args []string) int {
 		return cmdInit(args[1:])
 	case "intake":
 		return cmdIntake(args[1:])
+	case "drivers":
+		return cmdDrivers(args[1:])
+	case "contract":
+		return cmdContract(args[1:])
 	case "scope":
 		return cmdScope(args[1:])
 	case "boundaries":
@@ -610,24 +616,24 @@ func cmdIntake(args []string) int {
 	if err != nil {
 		return fail(err)
 	}
+	m, pat := resolveDriver(pos[0])
+	parse, ok := program.ParserFor(m.Parser)
+	if !ok {
+		return fail(fmt.Errorf("driver %s names reader %q, which is not registered", m.ID, m.Parser))
+	}
 	client := netx.New(program.UserAgent(), 5, nil)
 	defer client.Close()
-	var in *program.Intake
-	if platform == "h1" {
-		handle, _, err := program.HackerOneHandle(pos[0])
-		if err != nil {
-			return fail(err)
-		}
-		in, err = program.FetchHackerOne(context.Background(), client, handle)
-	} else {
-		n := *maxLinks
-		if *noFollow {
-			n = 0
-		}
-		in, err = program.FetchWeb(context.Background(), client, pos[0], program.FetchOptions{Follow: n > 0, MaxLinks: n})
+	n := *maxLinks
+	if *noFollow {
+		n = 0
 	}
+	var in *program.Intake
+	in, err = parse(context.Background(), client, pos[0], program.FetchOptions{Follow: n > 0, MaxLinks: n})
 	if err != nil {
-		return fail(err)
+		// Name the driver and its reader: when a platform page is a JavaScript
+		// shell the driver can be right about the claim and still have no reader
+		// that can read it, and that gap must be visible in the failure.
+		return fail(fmt.Errorf("driver %s (reader %s) could not read %s: %w", m.ID, m.Parser, pos[0], err))
 	}
 	in.TrustScope = *trustScope
 	if *dryRun {
@@ -666,11 +672,20 @@ func cmdIntake(args []string) int {
 	_ = p.AppendAudit(fmt.Sprintf("intake from %s (%s, %s), %d assets, %d candidates",
 		in.URL, platform, in.FetchedAt.Format(time.RFC3339), len(in.Assets), len(in.Candidates)))
 
+	c := program.BuildContract(in, m)
+	if err := program.SaveContract(p, c); err != nil {
+		return fail(err)
+	}
+	_ = p.AppendAudit(fmt.Sprintf("contract from driver %s v%d (matched %q): %d in scope, %d out of scope, %d path-restricted",
+		m.ID, m.Version, pat, len(c.Scope), len(c.Out), len(c.PathOnly)))
+
 	fmt.Print(in.Markdown())
 	if rd, err := program.LoadRulesDiff(p.Dir); err == nil && rd.Changed() {
 		fmt.Println("\nwarning rules changed since the last intake — run: kai rules-diff " + slug)
 	}
 	fmt.Printf("\nworkspace  %s\n", p.Dir)
+	fmt.Printf("driver     %s (matched %s)\n", m.ID, pat)
+	fmt.Printf("contract   %s\n", p.StatePath("program.yaml"))
 	sc := in.Scope()
 	if len(sc.In) > 0 {
 		fmt.Printf("next       kai recon %s   # %d seed host(s)\n", slug, len(sc.In))
@@ -679,6 +694,7 @@ func cmdIntake(args []string) int {
 	} else {
 		fmt.Printf("next       read %s/policy.md — this program has no host-based scope\n", p.Dir)
 	}
+	fmt.Printf("contract   kai contract %s --audit   # the contract vs scope.txt\n", slug)
 	return 0
 }
 

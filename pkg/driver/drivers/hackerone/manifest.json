@@ -1,0 +1,54 @@
+{
+  "version": 1,
+  "id": "hackerone",
+  "name": "HackerOne",
+  "homepage": "https://www.hackerone.com",
+  "description": "Scope is machine-readable over a public GraphQL endpoint; a program is claimed by its handle.",
+  "parser": "hackerone",
+  "intake_urls": [
+    "hackerone.com/*",
+    "*.hackerone.com/*"
+  ],
+  "requires_auth": false,
+  "policy_fetch": {
+    "kind": "graphql",
+    "endpoint": "https://hackerone.com/graphql",
+    "notes": "Public program lookup by handle. No login: the response is the platform's own structured scope, so it is the highest-confidence scope source available."
+  },
+  "scope_extraction": {
+    "kind": "structured",
+    "notes": "structured_scopes: eligible_for_submission decides in/out; a path-restricted asset is recorded but never widened to a host rule."
+  },
+  "mandatory_conditions": [
+    {
+      "id": "reporting-identity",
+      "text": "Reports must be sent from the researcher's @wearehackerone.com address; a report from another address is rejected by the platform before it reaches the program."
+    },
+    {
+      "id": "disclosure-policy",
+      "text": "Disclosure timing is governed by the program's policy and the platform, not by the hunter."
+    }
+  ],
+  "report_field_set": [
+    "title",
+    "weakness",
+    "severity_rating",
+    "cvss",
+    "asset",
+    "description",
+    "impact",
+    "steps_to_reproduce",
+    "evidence"
+  ],
+  "reward_fields": [
+    "currency",
+    "base_bounty",
+    "minimum_bounty",
+    "top_bounty_lower",
+    "top_bounty_upper",
+    "average_bounty_lower",
+    "average_bounty_upper"
+  ],
+  "submit_channel": "platform",
+  "submit_url": "https://hackerone.com/reports/new"
+}

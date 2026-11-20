@@ -1,0 +1,59 @@
+{
+  "version": 1,
+  "id": "bugcrowd",
+  "name": "Bugcrowd",
+  "homepage": "https://www.bugcrowd.com",
+  "description": "Claims Bugcrowd program URLs. The program page is client-rendered: a plain HTTP GET returns a JavaScript shell, so the generic reader refuses it today and this driver needs its own reader (the platform API or an authenticated session) before intake can succeed.",
+  "parser": "generic",
+  "intake_urls": [
+    "bugcrowd.com/*",
+    "*.bugcrowd.com/*"
+  ],
+  "requires_auth": false,
+  "policy_fetch": {
+    "kind": "html",
+    "notes": "Measured 2026-11-20: GET /engagements/<handle> with a browser user-agent returns 200 and ~113 KB, but the text is a JavaScript shell with no scope material (0 occurrences of targets / in-scope strings), and /engagements/<handle>.json answers 406 with every Accept header tried. A non-browser fetch with the default kai user-agent returns ~70 bytes of text, which the intake refuses as unreadable rather than writing an empty contract. Reading a Bugcrowd program therefore requires its own reader: either the platform API with a session, or a rendered fetch."
+  },
+  "scope_extraction": {
+    "kind": "html",
+    "in_headings": [
+      "In scope",
+      "Targets",
+      "Scope"
+    ],
+    "out_headings": [
+      "Out of scope",
+      "Out-of-scope",
+      "Not in scope"
+    ],
+    "notes": "Heading hits are candidates for the operator to verify; policy text still wins, and nothing is promoted into scope.txt without an explicit flag."
+  },
+  "mandatory_conditions": [
+    {
+      "id": "reporting-identity",
+      "text": "Testing must be performed from a Bugcrowd researcher alias (a @bugcrowdninja.com address); traffic from personal identity leaks the researcher and can void the reward."
+    },
+    {
+      "id": "vrt",
+      "text": "Severity is expressed in the platform's VRT taxonomy, so the draft must carry a VRT-style category rather than only a CVSS vector."
+    }
+  ],
+  "report_field_set": [
+    "title",
+    "target",
+    "vrt_category",
+    "severity_rating",
+    "description",
+    "steps_to_reproduce",
+    "proof_of_concept",
+    "remediation_advice"
+  ],
+  "reward_fields": [
+    "currency",
+    "reward_range_low",
+    "reward_range_high",
+    "points"
+  ],
+  "submit_channel": "platform",
+  "submit_url": "https://bugcrowd.com/submissions/new"
+}

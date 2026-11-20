@@ -497,10 +497,17 @@ finds it; `go install` alone writes to `$GOPATH/bin`, which is not on root's PAT
 | CI | done (`.github/workflows/ci.yml`: gofmt, vet, build, test, `-race`, leak guard, install check) |
 | §14 split-pane workspace (bare `kai`, `kai tui`, `kai tui --demo`) | done (`pkg/progress`, `internal/cli/{canvas,tui}.go`) |
 | §10 step 2: `kai serve` (HTTP/JSON API) | done (`pkg/serve` — read-only HTTP/JSON, bearer-gated, one-file dashboard) |
-| §10 step 4-5: driver manifests, model/archetypes | planned |
+| §11 program contract | done (`state/program.yaml` via `pkg/program/contract.go`, `kai contract [--audit]`) |
+| §10 step 4-5: driver manifests, model/archetypes | drivers done (`pkg/driver` — embedded manifests, registry seam, `kai drivers`); program archetypes planned |
 | §10 step 6: LLM planner seam | planned, last on purpose |
 
 Deviations from the original text, recorded so the plan stays honest:
+
+- The program contract lives at `state/program.yaml` and is written as JSON. That is valid YAML 1.2,
+  so `yq`/PyYAML/editors read it and kai keeps its zero-dependency build. The two artifacts the plan
+  named — `kai.toml` and `state/program.yaml` — are the same file; the name follows the state
+  directory's convention (`state/outcomes.jsonl`, `state/plan.json`) rather than a second top-level
+  config.
 
 - T1.3 planned to dedupe per `(host, class)`. The ranked queue is path-level and carries no host,
   so the step merges per class only and lists the collapsed paths under `merged_hypotheses`.
@@ -520,7 +527,9 @@ Deviations from the original text, recorded so the plan stays honest:
 ## Next
 
 1. `kai serve` variants: a small `kai serve --watch` (SSE over `pkg/progress`) and a mobile-friendly
-   card layout were the two things the first live look asked for; neither blocks `kai.toml`.
-2. `kai.toml` program manifest plus platform drivers (policy fetch, submission channel).
+   card layout were the two things the first live look asked for; neither blocks the driver work.
+2. Program archetypes on top of the driver manifests (HackerOne/Bugcrowd/self-hosted/Cantina shapes),
+   and a reader for platforms whose policy is not plain HTML (Bugcrowd's API, an authenticated
+   session) — the driver seam already names the reader, so this is registration, not core change.
 3. Program model and archetypes on top of the surface store, then invariant testing.
 4. LLM planner seam — proposes into `plan.json`, never executes.

@@ -1,0 +1,44 @@
+{
+  "version": 1,
+  "id": "selfhosted",
+  "name": "Self-hosted (VDP)",
+  "description": "Fallback driver: any program that publishes its own policy instead of living on a platform. Contact details come from RFC 9116 security.txt when it exists.",
+  "parser": "generic",
+  "intake_urls": [
+    "*"
+  ],
+  "requires_auth": false,
+  "policy_fetch": {
+    "kind": "securitytxt",
+    "path": "/.well-known/security.txt",
+    "notes": "RFC 9116. A missing file is a fact to record, not an error: many self-hosted programs publish policy as a page and nothing else."
+  },
+  "scope_extraction": {
+    "kind": "html",
+    "in_headings": [
+      "In scope",
+      "Scope",
+      "Assets",
+      "Targets"
+    ],
+    "out_headings": [
+      "Out of scope",
+      "Out-of-scope",
+      "Excluded",
+      "Not in scope"
+    ],
+    "notes": "Text-only program pages. Host rules are candidates until the operator confirms them against the policy."
+  },
+  "report_field_set": [
+    "title",
+    "severity_rating",
+    "asset",
+    "description",
+    "impact",
+    "steps_to_reproduce",
+    "evidence",
+    "remediation_advice"
+  ],
+  "submit_channel": "email",
+  "submit_url": ""
+}

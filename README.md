@@ -120,6 +120,8 @@ only for text sources and only after you have verified each host in `policy.md`.
 | `doctor [--no-net]` | check local environment |
 | `init <program> [--platform P] [--url U] [--verdict V] [--domain d,d]` | create workspace |
 | `intake <url\|handle> [--name slug] [--dry-run] [--force] [--trust-scope] [--max-links N] [--no-follow]` | Phase 0: read program |
+| `drivers [<url>] [--json]` | show the platform drivers, or which one claims a target |
+| `contract <program> [--json] [--audit]` | the contract of record (`state/program.yaml`) |
 | `boundaries <program>` | print scope limits & rules |
 | `brief <program> [--out file]` | compact context card (~300 tokens) |
 | `track <program> list\|submit\|status\|payout\|retest` | submission & triage ledger |
@@ -382,6 +384,49 @@ submission channel and any contact address separately so they are never confused
 
 ---
 
+## Platform drivers and the program contract
+
+`kai intake` does not branch on platform names in code. Each platform is a directory
+of data, `pkg/driver/drivers/<id>/manifest.json`, embedded into the binary at build
+time, so `go install` carries every driver and nothing is fetched at run time:
+
+- `id`, `name`, `homepage`, `description`
+- `intake_urls` — host/path patterns the driver claims; the most specific pattern wins
+- `parser` — the reader that turns a policy page into an intake (`hackerone`, `generic`)
+- `policy_fetch` — how the policy is read (`graphql`, `html`, `securitytxt`)
+- `scope_extraction` — how scope is read (`structured`, `html` with in/out headings)
+- `mandatory_conditions` — rules that are not scope rules (research identity, report taxonomy)
+- `report_field_set`, `reward_fields`, `submit_channel`, `submit_url`
+
+A driver claims a target and supplies vocabulary; it decides nothing else. `kai drivers`
+lists them, `kai drivers <url>` says which one claims that URL and which pattern won.
+
+The intake result is written to `state/program.yaml` as the contract of record: the
+platform, the driver that read it, the snapshot it rests on (hash, fetch time,
+confidence, score), every in-scope and out-of-scope rule with its provenance, the
+assets that cannot be expressed as host rules (path-restricted, non-web), the
+mandatory conditions, the report field set, and an action table split into read-only /
+needs-approval / forbidden. Later commands read this file instead of re-deriving
+policy, so a verdict can be traced back to the snapshot it came from.
+
+The file is JSON — a subset of YAML 1.2 — so `yq`, PyYAML, or an editor reads it while
+kai stays free of a YAML dependency. Empty tables are written as `[]`, never omitted:
+a reader should not have to tell "no rules" from "field missing".
+
+`kai contract <program>` prints it as text. `kai contract <program> --audit` compares
+it against `scope.txt` and `out-of-scope.txt`. The dangerous direction is a gate
+*broader* than the contract — that is what lets recon touch an asset the program never
+authorised — so those findings exit `1`; a gate that is narrower is a `note:` and exits
+`0`.
+
+A driver can claim a target before a reader exists for it. Bugcrowd's program pages
+are client-rendered; the generic reader refuses them ("too little readable text")
+instead of writing an empty contract, and the failure names the driver and the reader
+so the gap is visible. A platform with a non-HTML policy needs its own reader
+registered under the id its manifest names.
+
+---
+
 ## Two faces
 
 The CLI is the reference implementation. Two other faces read the same workspace
@@ -430,7 +475,7 @@ the release binary; it would not turn `kai` into a library. For now, use
 
 ## Status
 
-Current line: `kai 0.12.0`.
+Current line: `kai 0.14.0`.
 
 | Version | Contents |
 |---|---|
@@ -441,7 +486,8 @@ Current line: `kai 0.12.0`.
 | v0.10 | backup/restore, compact brief, triage ledger |
 | v0.11 | per-target outcome ledger and a convergent `next` queue |
 | v0.12 | engagement plan (`plan`), cross-program board (`board`), evidence capture, submission drafts, engine packages under `pkg/` |
-| v0.13 (unreleased) | split-pane terminal workspace, read-only `kai serve` service face |
+| v0.13 | split-pane terminal workspace, read-only `kai serve` service face |
+| v0.14 | platform drivers as embedded data, `state/program.yaml` program contract, `kai drivers` / `kai contract --audit` |
 
 `kai` is a context preparer and an evidence bookkeeper, not a hunting agent. The full design
 lives in [`SPEC.md`](SPEC.md); the improvement roadmap in [`IMPROVEMENT-PLAN.md`](IMPROVEMENT-PLAN.md).
@@ -454,6 +500,7 @@ The deterministic core lives under `pkg/` and is importable:
 |---|---|
 | `pkg/scope` | rule parsing and the scope gate |
 | `pkg/program` | intake, boundaries, validation |
+| `pkg/driver` | platform drivers (embedded manifests) |
 | `pkg/recon` | surface store (hosts, endpoints, bundles) |
 | `pkg/surface` | structure, ranking, outcomes |
 | `pkg/hypothesis` | queue → engagement plan |
