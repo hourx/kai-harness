@@ -316,7 +316,11 @@ func ContractAudit(p *workspace.Program, c Contract) []string {
 		}
 	}
 	if p.Meta.Platform != "" && c.Platform != "" && p.Meta.Platform != c.Platform {
-		problems = append(problems, fmt.Sprintf("note: meta.json says platform %s, the contract says %s", p.Meta.Platform, c.Platform))
+		// The workspace may record the platform under its short name ("h1" for
+		// the driver "hackerone"). That is a label, not a disagreement.
+		if m, ok := driver.Get(strings.ToLower(p.Meta.Platform)); !ok || m.ID != c.Driver {
+			problems = append(problems, fmt.Sprintf("note: meta.json says platform %s, the contract says %s", p.Meta.Platform, c.Platform))
+		}
 	}
 	sort.Strings(problems)
 	return problems
@@ -329,8 +333,16 @@ func (c Contract) Markdown() string {
 	fmt.Fprintf(&b, "- driver: %s (manifest v%d)\n", c.Driver, c.DriverVersion)
 	fmt.Fprintf(&b, "- platform: %s\n", c.Platform)
 	fmt.Fprintf(&b, "- url: %s\n", c.URL)
-	fmt.Fprintf(&b, "- intake fetched: %s (confidence %s, verdict %s, score %d)\n",
-		c.Intake.FetchedAt.Format(time.RFC3339), c.Intake.Confidence, c.Intake.Verdict, c.Intake.Score)
+	fmt.Fprintf(&b, "- intake fetched: %s", c.Intake.FetchedAt.Format(time.RFC3339))
+	var facts []string
+	if s := strings.TrimSpace(c.Intake.Confidence); s != "" {
+		facts = append(facts, "confidence "+s)
+	}
+	if s := strings.TrimSpace(c.Intake.Verdict); s != "" {
+		facts = append(facts, "verdict "+s)
+	}
+	facts = append(facts, fmt.Sprintf("score %d", c.Intake.Score))
+	fmt.Fprintf(&b, " (%s)\n", strings.Join(facts, ", "))
 	if c.Intake.Hash != "" {
 		fmt.Fprintf(&b, "- intake snapshot: %s\n", c.Intake.Hash)
 	}

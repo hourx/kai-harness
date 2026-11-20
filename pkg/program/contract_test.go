@@ -219,6 +219,61 @@ func TestContractAuditAgreesOnAConsistentWorkspace(t *testing.T) {
 	}
 }
 
+// A workspace may label the platform with a short name ("h1" for the driver
+// "hackerone"). Different strings, same platform: not a disagreement.
+func TestAuditAcceptsAShortPlatformName(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("KAI_HOME", home)
+	p, err := workspace.Create("demo", workspace.Meta{Platform: "h1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := Contract{
+		ContractVersion: ContractVersion,
+		Driver:          "hackerone",
+		Platform:        "h1",
+		Name:            "demo",
+		Scope:           []Rule{{Rule: "example.com", Source: "structured scope (eligible)"}},
+		Out:             []Rule{},
+	}
+	if err := os.WriteFile(filepath.Join(p.Dir, "scope.txt"), []byte("example.com\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(p.Dir, "out-of-scope.txt"), []byte(""), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	for _, s := range ContractAudit(p, c) {
+		if strings.Contains(s, "meta.json says platform") {
+			t.Errorf("a known short platform name must not read as a mismatch: %s", s)
+		}
+	}
+}
+
+// The header line must not print an empty field: "" would show up as a dangling
+// comma, which reads like a value somebody forgot to fill in.
+func TestMarkdownOmitsEmptyFacts(t *testing.T) {
+	small := &Intake{
+		Platform:  "h1",
+		Name:      "Small",
+		URL:       "https://hackerone.com/small",
+		FetchedAt: time.Now().UTC(),
+		Scorecard: Score{Total: 0},
+		Assets:    []Asset{{Identifier: "example.com", Type: "url", Eligible: true}},
+	}
+	m, _ := driver.Get("hackerone")
+	md := BuildContract(small, m).Markdown()
+	if strings.Contains(md, "confidence ,") || strings.Contains(md, "(, ") || strings.Contains(md, "  ") {
+		t.Errorf("empty facts leaked into the header:\n%s", md)
+	}
+	for _, line := range strings.Split(md, "\n") {
+		if strings.HasPrefix(line, "- intake fetched:") {
+			if !strings.HasSuffix(line, "(score 0)") {
+				t.Errorf("header = %q, want it to end with the score only", line)
+			}
+		}
+	}
+}
+
 func TestMarkdownNamesTheProvenance(t *testing.T) {
 	m, _ := driver.Get("hackerone")
 	md := BuildContract(testIntake(), m).Markdown()
