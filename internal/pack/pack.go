@@ -22,16 +22,9 @@ import (
 )
 
 // Artifacts are the recon files a downstream pipeline already knows how to read.
-var Artifacts = []string{
-	"subs.txt",
-	"live.txt",
-	"urls.txt",
-	"js.ts",
-	"endpoints.txt",
-	"nuclei.txt",
-	"ranked.txt",
-	"smuggling.txt",
-}
+// The list lives in pkg/workspace so the CLI, the pack and the service face
+// agree on what an artifact is.
+var Artifacts = workspace.ArtifactNames
 
 // Result describes a built archive.
 type Result struct {

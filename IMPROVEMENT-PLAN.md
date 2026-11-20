@@ -496,7 +496,7 @@ finds it; `go install` alone writes to `$GOPATH/bin`, which is not on root's PAT
 | §10 step 3: public surface under `pkg/` | done — engine closure promoted, `internal/` keeps CLI glue and operator conveniences |
 | CI | done (`.github/workflows/ci.yml`: gofmt, vet, build, test, `-race`, leak guard, install check) |
 | §14 split-pane workspace (bare `kai`, `kai tui`, `kai tui --demo`) | done (`pkg/progress`, `internal/cli/{canvas,tui}.go`) |
-| §10 step 2: `kai serve` (HTTP/JSON API) | planned |
+| §10 step 2: `kai serve` (HTTP/JSON API) | done (`pkg/serve` — read-only HTTP/JSON, bearer-gated, one-file dashboard) |
 | §10 step 4-5: driver manifests, model/archetypes | planned |
 | §10 step 6: LLM planner seam | planned, last on purpose |
 
@@ -511,11 +511,16 @@ Deviations from the original text, recorded so the plan stays honest:
   dropped is pruned rather than left half-empty.
 - `kai evidence` is a plain `add|list|show|attach` surface, not a capture wizard: the operator or
   an agent already holds the bytes; kai's job is the hash and the index.
+- `kai serve` is read-only by construction: no handler runs a command or writes an artifact, so an
+  exposed port cannot become a remote scan surface. Mutations stay in the CLI, where a scope gate
+  and a printed artifact are attached to them. Loopback by default; any other bind needs a bearer
+  token, and the token check runs before the listener opens so a misconfiguration fails loudly
+  instead of quietly serving a campaign to the network.
 
 ## Next
 
-1. `kai serve` — token-gated HTTP/JSON over the same functions the CLI calls, so a real UI can be
-   built without shelling out.
+1. `kai serve` variants: a small `kai serve --watch` (SSE over `pkg/progress`) and a mobile-friendly
+   card layout were the two things the first live look asked for; neither blocks `kai.toml`.
 2. `kai.toml` program manifest plus platform drivers (policy fetch, submission channel).
 3. Program model and archetypes on top of the surface store, then invariant testing.
 4. LLM planner seam — proposes into `plan.json`, never executes.

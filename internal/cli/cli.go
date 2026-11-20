@@ -77,6 +77,7 @@ Commands:
                                                              into a campaign dir
   status  [<program>]                                        show state
   tui     [<program>] [--demo] [--frames N]                  split-pane workspace (bare kai on a terminal)
+  serve   [--addr host:port] [--token T|auto]                read-only HTTP/JSON view of the workspace
   version                                                    print version
 
 Exit codes for scope:
@@ -100,6 +101,8 @@ func Run(args []string) int {
 	switch args[0] {
 	case "tui":
 		return tuiCmd(args[1:])
+	case "serve":
+		return cmdServe(args[1:])
 	case "version", "-v", "--version":
 		fmt.Println("kai " + version.String())
 		return 0

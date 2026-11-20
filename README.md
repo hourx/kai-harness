@@ -382,6 +382,41 @@ submission channel and any contact address separately so they are never confused
 
 ---
 
+## Two faces
+
+The CLI is the reference implementation. Two other faces read the same workspace
+and never change what a run does.
+
+`kai` on a terminal (or `kai tui <program>`) opens the workspace itself: steps on the
+left, the process output, the ranked queue, and a command line at the bottom. `/help`,
+`/enum`, `/map`, `/next`, `/plan`, `/board`, `/status`, `/evidence`, `/scope` go
+through the same dispatcher as the headless commands, so the panes cannot show
+something the CLI would not print. `ctrl-c` aborts the running command, it does not
+kill the workspace. `kai tui --demo` draws the layout without needing a terminal.
+
+`kai serve` publishes the same state over HTTP for a phone or any other UI:
+
+| Endpoint | Returns |
+|---|---|
+| `GET /` | single-file dashboard — no build step, no external assets |
+| `GET /healthz` | liveness; the only route that needs no token |
+| `GET /api/v1/board` | cross-program board, including `do today` |
+| `GET /api/v1/programs` | every program with surface counts and scope verdict |
+| `GET /api/v1/programs/<n>` | queue, plan, findings, outcomes, evidence, scope samples |
+| `GET /api/v1/programs/<n>/queue?limit=N` | ranked queue (`limit` is clamped) |
+| `GET /api/v1/programs/<n>/scope?host=X` | the gate's verdict for one host, and why |
+| `GET /api/v1/programs/<n>/{brief,outcomes,evidence}` | brief, outcome ledger, evidence index |
+
+It is read-only by construction: no endpoint runs a command or writes a file, so a
+published port cannot become a remote scan surface. Mutations stay in the CLI, where a
+scope gate and a printed artifact are attached to them. The default bind is loopback;
+anything else requires a token (`--token auto` generates one, or set `KAI_SERVE_TOKEN`)
+and the check happens before the listener opens, so a misconfiguration fails loudly
+instead of quietly serving a campaign to the network. `--addr 127.0.0.1:0` asks the
+kernel for a free port.
+
+---
+
 ## FAQ
 
 **Is there an `npx` package?** No. `npx` runs npm/Node.js packages, and `kai` is a Go
@@ -406,6 +441,7 @@ Current line: `kai 0.12.0`.
 | v0.10 | backup/restore, compact brief, triage ledger |
 | v0.11 | per-target outcome ledger and a convergent `next` queue |
 | v0.12 | engagement plan (`plan`), cross-program board (`board`), evidence capture, submission drafts, engine packages under `pkg/` |
+| v0.13 (unreleased) | split-pane terminal workspace, read-only `kai serve` service face |
 
 `kai` is a context preparer and an evidence bookkeeper, not a hunting agent. The full design
 lives in [`SPEC.md`](SPEC.md); the improvement roadmap in [`IMPROVEMENT-PLAN.md`](IMPROVEMENT-PLAN.md).
@@ -424,6 +460,8 @@ The deterministic core lives under `pkg/` and is importable:
 | `pkg/evidence` | hashed evidence capture |
 | `pkg/report` | platform field sets |
 | `pkg/outcome`, `pkg/triage`, `pkg/workspace` | ledgers and state |
+| `pkg/serve` | read-only HTTP/JSON face over the workspace |
+| `pkg/progress` | run events the terminal workspace renders |
 
 `internal/` keeps the CLI wiring and operator conveniences. Anything under `pkg/` is
 covered by tests and safe to depend on; the AGPL applies to both.
