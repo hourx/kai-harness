@@ -41,19 +41,12 @@ func cmdPatterns(args []string) int {
 	}
 
 	arch, source := patternArchetype(p, *declared)
-	lib := pattern.Public()
-	var problems []string
-	layers := 0
-	if *dir != "" {
-		adapters, err := pattern.LoadDir(*dir)
-		if err != nil {
-			return fail(err)
-		}
-		layers = len(adapters)
-		lib, problems, err = pattern.LoadAdapters(lib, adapters...)
-		if err != nil {
-			return fail(err)
-		}
+	// The same merge the shadow loop and the ranking use: the shipped layer, what
+	// this workspace adopted, then any directory the operator named. A reference
+	// view that showed an unadopted number would disagree with the plan it explains.
+	lib, layers, problems, err := loadPatternLayers(p, *dir)
+	if err != nil {
+		return fail(err)
 	}
 
 	tbl, err := outcome.Load(p.Dir)
@@ -144,6 +137,11 @@ func patternReport(program, arch, source string, lib pattern.Library, delta patt
 		fmt.Fprintf(&b, "### %s\n\n", f)
 		for _, pt := range rows {
 			scopeNote := pattern.Origin(pt, arch)
+			if pt.Note != "" {
+				// The number here is not what shipped: say so where the number is
+				// printed, not only in the layer file nobody opens.
+				scopeNote += " · adopted by the operator"
+			}
 			feeds := ""
 			if pt.Class != "" {
 				feeds = " · feeds `" + pattern.Label(pt.Class) + "`"

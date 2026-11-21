@@ -556,7 +556,7 @@ that kai does not, placed where each already fits this plan:
 **Not copied, on purpose:** PostgreSQL, the Docker scanner toolchain, a Next.js UI embedded with
 `go:embed`, megabytes of screenshots in the tree, and any LLM in the execution path. Every one of those
 buys capability kai deliberately refuses in exchange for one `go install` from a public proxy with a
-zero-dependency kernel. Their measured tree is 14.8 MB; kai's whole surface is ~16 packages, 210 test
+zero-dependency kernel. Their measured tree is 14.8 MB; kai's whole surface is 29 packages, 301 test
 functions and no external deps.
 
 ---
@@ -582,8 +582,8 @@ functions and no external deps.
 | §9.1/§15.1–15.2 coverage ledger + exploration rows | done — coverage rows (`yes`/`partial`/`no`) fed by evidence and outcomes, closed by the "not touched" list |
 | §15.5 HAR import into the evidence store | done — `kai evidence import --har <file>` (hash-verified blobs, idempotent, credential headers redacted by default) |
 | §15.3 evidence pairing check, invariant testing | planned (invariant statements are operator input; the sweep stays empty until they exist) |
-| §15.4 shadow lesson loop (propose, never apply) | planned |
-| §15.5 §9.3 pattern library, two layers + external adapter seam | planned |
+| §15.4 shadow lesson loop (propose, never apply) | done — `pkg/shadow` proposes from outcomes across workspaces, `kai shadow [--adopt ID\|--revert ID\|all]` writes one lesson into `state/pattern-overrides.json`, and an adopted lesson shows in `kai patterns` and ranks in `kai plan` |
+| §9.3 pattern library, two layers + external adapter seam | done in v0.17.0 (`pkg/pattern`, `kai patterns`, `kai contribute`; a `--dir` of layer files is the external seam) |
 | §10 step 6: LLM planner seam | planned, last on purpose |
 
 Deviations from the original text, recorded so the plan stays honest:
@@ -608,6 +608,15 @@ Deviations from the original text, recorded so the plan stays honest:
   and a printed artifact are attached to them. Loopback by default; any other bind needs a bearer
   token, and the token check runs before the listener opens so a misconfiguration fails loudly
   instead of quietly serving a campaign to the network.
+- §15.4's loop keys its evidence by `(archetype, class)`, and the archetype comes from the workspace
+  that *recorded* the outcome — so cross-engagement evidence only exists once each contributing
+  workspace has run `kai model`. An unshaped workspace's outcomes are reported as held
+  (`recorded under archetype *, not this program's …`) rather than pooled into the wrong key. A gap
+  proposal is deliberately not adoptable: a gap is closed by writing a pattern, and a command that
+  could "adopt" one would just be moving a number that answers nothing.
+- Every gate the loop applies (`MinPrograms`, `MinFired`, `RaisePaid`/`RaiseRatio`, `LowerNeg`,
+  `GapPaths`) is quoted in the report next to the key that failed it, so disagreeing with a
+  threshold means editing a constant, not guessing at one.
 
 ## 16. Release log
 
@@ -619,6 +628,8 @@ Deviations from the original text, recorded so the plan stays honest:
 | v0.15.0 | live progress: `kai serve --watch` SSE from the progress log, `state/progress.jsonl` |
 | v0.16.0 | program archetypes, `pkg/model` + `kai model`, coverage ledger, `kai evidence import --har` |
 | v0.17.0 | pattern layer: `pkg/pattern` (keys, two layers, delta, contribution audit), `kai patterns`, `kai contribute`, delta boost as a tie-breaker in `kai plan` |
+| v0.17.1 | an empty delta serialises as `[]`, not `null`, so a fresh workspace reads cleanly |
+| v0.18.0 | shadow lesson loop: `pkg/shadow` (propose from outcomes across workspaces, every gate quoted, and no proposal whose number cannot move), `pkg/pattern.Overrides` (`state/pattern-overrides.json`), `kai shadow --adopt ID \| --revert ID\|all`, adopted lessons marked in `kai patterns` and ranked in `kai plan` |
 
 Two habits worth keeping from this stretch: a claim in a doc is worth nothing until a command printed
 it against a real workspace (every command above was live-fired before release), and a test that
@@ -642,7 +653,10 @@ workstream of its own, and nothing here is mobile-first.
    Still open on this line: a transport for the tier-2 aggregate (deliberately not built — the payload
    is printed and audited, nothing is sent), and feeding contributed aggregates back into a ranking
    model rather than only into the shipped layer.
-5. Shadow lesson loop (§15.4): propose, never apply.
+5. ~~Shadow lesson loop (§15.4): propose, never apply~~ — done in v0.18.0 (`pkg/shadow`,
+   `kai shadow --adopt/--revert`). Still open on this line: a gap is a to-do for the operator rather
+   than an action, so there is no path yet from "the model names an entity no pattern speaks about"
+   to a written pattern without leaving the CLI.
 6. LLM planner seam — proposes into `plan.json`, never executes.
 
 **Deferred, not next:** a mobile-friendly card layout for the dashboard. The live stream that landed

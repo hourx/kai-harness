@@ -50,7 +50,19 @@ func cmdPlan(args []string) int {
 		return fail(err)
 	}
 	delta := pattern.BuildDelta(p.Name, arch, tbl.Records(), time.Now().UTC())
-	plan := hypothesis.BuildWith(queue, hypothesis.Options{Boost: delta.BoostClass})
+
+	// An adopted lesson is worth a point here, on top of the delta and never
+	// instead of it: a pattern the operator accepted changes how far up a step
+	// floats, not what the surface found.
+	over, adopted, err := pattern.LoadOverrides(p.Dir)
+	if err != nil {
+		return fail(err)
+	}
+	boost := delta.BoostClass
+	if adopted {
+		boost = func(class string) int { return delta.BoostClass(class) + over.Nudge(class) }
+	}
+	plan := hypothesis.BuildWith(queue, hypothesis.Options{Boost: boost})
 	jsonPath, mdPath, err := hypothesis.Write(p.Dir, plan)
 	if err != nil {
 		return fail(err)
@@ -80,6 +92,9 @@ func cmdPlan(args []string) int {
 			continue
 		}
 		fmt.Printf("  #%d [%s] %s — %s (score %d)\n", s.Rank, s.Needs, s.Class, s.Target, s.Score)
+	}
+	if adopted {
+		fmt.Printf("ranking  %d adopted lesson(s) from this workspace's layer\n", len(over.Adopted))
 	}
 	fmt.Printf("wrote %s\nwrote %s\n", jsonPath, mdPath)
 	return 0

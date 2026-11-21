@@ -201,6 +201,9 @@ type Pattern struct {
 	Why        string  `json:"why"`
 	Confidence float64 `json:"confidence"` // 0..1: how sure the layer that supplied it is
 	Source     string  `json:"source"`
+	// Note carries the provenance of an adjustment kai did not make: who adopted
+	// it, on what evidence. Empty for every pattern the layer ships as written.
+	Note string `json:"note,omitempty"`
 }
 
 // Validate rejects a pattern that cannot be trusted or compared.

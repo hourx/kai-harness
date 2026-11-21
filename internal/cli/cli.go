@@ -72,6 +72,8 @@ Commands:
   patterns <program> [--json] [--write] [--dir D] [--archetype NAME]
                                                              what applies to this shape + what paid here before
   contribute <program> [--json] [--out f]                     build the anonymous pattern payload (never sent)
+  shadow  <program> [--json] [--write] [--adopt ID|--revert ID|all]
+                                                             lessons this workspace's outcomes propose (nothing applied)
   plan    <program>                                          queue -> waves by what each step needs
   board   [<program>]                                        what is worth doing today (all programs)
   evidence <program> [list|add|import|show|attach] [--har f]  capture the raw proof behind a finding
@@ -161,6 +163,8 @@ func Run(args []string) int {
 		return cmdPatterns(args[1:])
 	case "contribute":
 		return cmdContribute(args[1:])
+	case "shadow":
+		return cmdShadow(args[1:])
 	case "plan":
 		return cmdPlan(args[1:])
 	case "board":
