@@ -93,6 +93,11 @@ func BuildDelta(program, archetype string, records []outcome.Record, now time.Ti
 // Sort orders the keys the way every report prints them.
 func (d *Delta) Sort() {
 	sort.Slice(d.Keys, func(i, j int) bool { return d.Keys[i].Key.String() < d.Keys[j].Key.String() })
+	if d.Keys == nil {
+		// An empty list, not null: "nothing recorded here" is a fact a reader can
+		// iterate over, and it keeps the file stable between runs.
+		d.Keys = []KeyStat{}
+	}
 }
 
 // Stat returns the recorded counts for a key.

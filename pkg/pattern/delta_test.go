@@ -3,6 +3,7 @@ package pattern
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -85,6 +86,11 @@ func TestBuildDeltaWithNoRecordsIsEmptyNotAnError(t *testing.T) {
 	d := BuildDelta("acme", "api", nil, time.Now().UTC())
 	if len(d.Keys) != 0 {
 		t.Fatalf("want no keys, got %+v", d.Keys)
+	}
+	// null is not an empty list: a reader that iterates the file must not crash on
+	// the common case of a program with nothing recorded yet.
+	if raw := string(mustJSON(t, d)); !strings.Contains(raw, `"keys":[]`) {
+		t.Fatalf("an empty delta must serialise its keys as []:\n%s", raw)
 	}
 	if d.BoostClass("graphql") != 0 {
 		t.Fatal("an empty delta must boost nothing")
