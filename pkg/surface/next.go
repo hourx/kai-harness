@@ -57,6 +57,18 @@ var probes = map[string]string{
 	"infra-or-other":       "Read the policy's impact examples for this asset class, then pick the one with the most concrete payout path.",
 }
 
+// Classes returns the closed set of hypothesis classes the queue can assign,
+// sorted. It is exported so the pattern layer can refuse a pattern that feeds a
+// class nothing ever produces — a typo'd join looks plausible and does nothing.
+func Classes() []string {
+	out := make([]string, 0, len(probes))
+	for c := range probes {
+		out = append(out, c)
+	}
+	sort.Strings(out)
+	return out
+}
+
 var classLabel = map[string]string{
 	"auth":    "auth-bypass/ATO",
 	"admin":   "privilege-escalation",

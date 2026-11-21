@@ -5,8 +5,12 @@ Repo renamed `hourx/kai` → **`hourx/kai-harness`**; module `github.com/hourx/k
 `kai-harness`. CLI binary keeps the name `kai` (ripgrep/rg precedent) so existing docs and
 `KAI_HOME` paths stay valid. Sections 9–13 carry the design agreed with the operator on 2026-11-20.
 
-Status: sections 0–8 = audit + tiered plan. Sections 9–13 = design of record. Sprint 1 (Tier 0 +
-T1.1/T1.2) is implemented in this commit; everything else here is still PLAN ONLY.
+Status: sections 0–8 = audit + tiered plan. Sections 9–13 = design of record. Implemented so far
+(see §16 for the release log): Tier 0 + T1.1–T1.6, the `pkg/` promotion (§10), the driver registry and
+program contract (§11), the workspace face and `kai serve` (§14), program archetypes + model + coverage
+ledger (§9.1) and the pattern layer with its contribution audit (§9.3, §12 T1/T2). Still PLAN ONLY:
+the recon-depth tier (§4), the shadow lesson loop (§15.4), the LLM seam (§12), a non-HTML policy
+reader, and any transport for the tier-2 aggregate.
 
 ---
 
@@ -340,13 +344,28 @@ an asset still marked `tested: no` outranks one on an asset probed this week, an
 no coverage row are printed as their own list, so "never touched" can never be invisible. A sort key,
 not a sixth sweep.
 
-### 9.3 Pattern knowledge, keyed by shape — not by URL
+### 9.3 Pattern knowledge, keyed by shape — not by URL — IMPLEMENTED (v0.17.0)
 
-The pattern library is keyed by `(archetype, entity|action|invariant-class)`. Each program also keeps a
-*delta*: which keys fired, and how the operator classified the outcome (from `outcomes.jsonl`). On
-program N+1, ranking is driven by what actually paid on the same archetype. That is the "kai
-understands the pattern of every program" requirement — implemented as data + deterministic scoring,
-not as a prompt.
+The pattern library is keyed by `(archetype, family, name)` where family is `entity|action|class` and
+the name is canonicalised, so one idea has one key. Each program also keeps a *delta*: which keys
+fired and how the operator classified the outcome, read back from `outcomes.jsonl`. On program N+1,
+ranking is driven by what actually paid on the same archetype. That is the "kai understands the
+pattern of every program" requirement — data + deterministic scoring, not a prompt.
+
+What shipped: `pkg/pattern` (key, library, delta, layer adapters, contribution audit) + `kai patterns`
++ `kai contribute`; `pkg/hypothesis` gained `BuildWith(q, Options{Boost: …})`, and `kai plan` passes
+the delta boost. Two decisions worth keeping:
+
+- **Inheritance is first-class.** `graphql-api` and `mobile-api` inherit the `api` layer
+  (`archetype.Parent`). Before that, a GraphQL program was reported as "no pattern" for classes the
+  library plainly covers — false gaps destroy trust in the true ones.
+- **A boost never outranks evidence.** It reorders inside a wave only; the realistic ceiling (9) tips a
+  two-point gap and does not move an 80-point one. Waves and the scope gate are untouched.
+
+Layer files also taught a lesson: a hand-written layer must accept the spellings the queue itself uses
+(`IDOR/BOLA` as well as `idor/bola`) and reject only what is genuinely wrong — an unknown shape,
+family, class or confidence, each reported with file + entry number, with the good entries still
+loaded.
 
 ### 9.4 How the model gets built without lying
 
@@ -399,10 +418,15 @@ Secondary (free, but not the primary): spec-first micro-run on the Claude MCP co
 
 ## 12. Data loop (3 tiers) + the LLM seam
 
-**Tiers.** T1 public: drivers, generic patterns, schemas. T2 opt-in anonymous aggregates: pattern keys
-+ outcome labels + hashed host fingerprint — **never** URLs, reports, credentials, or target data.
-T3 private: tenant-local, never uploaded. `kai contribute --dry-run` prints the exact payload; nothing
-leaves without the operator seeing it first.
+**Tiers.** T1 public: drivers, generic patterns, schemas — **shipped in v0.17.0** (61 patterns in
+`pkg/pattern/library.go`, keyed by shape). T2 opt-in anonymous aggregates: pattern keys + outcome
+labels + salted host fingerprint — **payload builder shipped, transport deliberately absent**:
+`kai contribute <program>` builds `kai-contribute/1` and prints it, `--json`/`--out` write it 0600,
+and every run says "Nothing was sent". The salt is per workspace (`state/patterns-salt`, 0600) so host
+fingerprints compare across runs and mean nothing outside. `Audit()` refuses a payload carrying a
+host-shaped or entity-shaped key, a long digit run, a raw host, or a foreign schema — the leak has to
+be impossible by construction, not by discipline. **Never** URLs, reports, credentials or target data.
+T3 private: tenant-local delta (`state/patterns-delta.json`), never uploaded.
 
 **LLM seam (deliberately last).** Four roles, all at the edge: (1) plan adjudicator — rank/verify the
 hypothesis queue; (2) evidence adjudicator — the Skeptic replacement; (3) unstructured→structured
@@ -585,6 +609,22 @@ Deviations from the original text, recorded so the plan stays honest:
   token, and the token check runs before the listener opens so a misconfiguration fails loudly
   instead of quietly serving a campaign to the network.
 
+## 16. Release log
+
+| Version | What it added |
+|---|---|
+| v0.12.0 | first tagged release: engine promoted to importable `pkg/`, CI, anon `go install` |
+| v0.13.0 | TUI workspace face (split panes over the same pipeline), `kai serve` read-only HTTP + JSON |
+| v0.14.0 | platform drivers embedded (`pkg/driver`), program contract `state/program.yaml`, `kai drivers` / `kai contract --audit` |
+| v0.15.0 | live progress: `kai serve --watch` SSE from the progress log, `state/progress.jsonl` |
+| v0.16.0 | program archetypes, `pkg/model` + `kai model`, coverage ledger, `kai evidence import --har` |
+| v0.17.0 | pattern layer: `pkg/pattern` (keys, two layers, delta, contribution audit), `kai patterns`, `kai contribute`, delta boost as a tie-breaker in `kai plan` |
+
+Two habits worth keeping from this stretch: a claim in a doc is worth nothing until a command printed
+it against a real workspace (every command above was live-fired before release), and a test that
+cannot fail is decoration — the pattern tests are written so that removing the join, the inheritance or
+the audit check makes them go red.
+
 ## Next
 
 Direction: the CLI is the product. `kai serve` is a read-only side face over the same state, not a
@@ -597,7 +637,11 @@ workstream of its own, and nothing here is mobile-first.
    (§9.1, §15.1–15.2) — done (`pkg/model`, `kai model`). Still open: the evidence pairing check
    (§15.3), then invariant testing once an operator has written statements worth falsifying.
 3. ~~HAR import into the evidence store~~ (§15.5) — done (`kai evidence import --har`).
-4. Pattern library, two layers (§9.3) + the external adapter seam (§12).
+4. ~~Pattern library, two layers (§9.3) + the external adapter seam (§12)~~ — done in v0.17.0
+   (`pkg/pattern`, `kai patterns`, `kai contribute`; layer files via `--dir` are the external seam).
+   Still open on this line: a transport for the tier-2 aggregate (deliberately not built — the payload
+   is printed and audited, nothing is sent), and feeding contributed aggregates back into a ranking
+   model rather than only into the shipped layer.
 5. Shadow lesson loop (§15.4): propose, never apply.
 6. LLM planner seam — proposes into `plan.json`, never executes.
 

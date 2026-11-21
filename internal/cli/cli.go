@@ -69,6 +69,9 @@ Commands:
   next    <program>                                          ranked test queue
   outcome <program> --status S [--class C] [--note T] <target...>
                                                              record what a target turned out to be
+  patterns <program> [--json] [--write] [--dir D] [--archetype NAME]
+                                                             what applies to this shape + what paid here before
+  contribute <program> [--json] [--out f]                     build the anonymous pattern payload (never sent)
   plan    <program>                                          queue -> waves by what each step needs
   board   [<program>]                                        what is worth doing today (all programs)
   evidence <program> [list|add|import|show|attach] [--har f]  capture the raw proof behind a finding
@@ -154,6 +157,10 @@ func Run(args []string) int {
 		return cmdNext(args[1:])
 	case "outcome":
 		return cmdOutcome(args[1:])
+	case "patterns":
+		return cmdPatterns(args[1:])
+	case "contribute":
+		return cmdContribute(args[1:])
 	case "plan":
 		return cmdPlan(args[1:])
 	case "board":

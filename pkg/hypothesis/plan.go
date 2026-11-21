@@ -30,12 +30,16 @@ const (
 
 // Step is one hypothesis with its preconditions and probe.
 type Step struct {
-	Rank    int      `json:"rank"`
-	Wave    int      `json:"wave"`
-	Needs   string   `json:"needs"`
-	Target  string   `json:"target"`
-	Class   string   `json:"class"`
-	Score   int      `json:"score"`
+	Rank   int    `json:"rank"`
+	Wave   int    `json:"wave"`
+	Needs  string `json:"needs"`
+	Target string `json:"target"`
+	Class  string `json:"class"`
+	Score  int    `json:"score"`
+	// Boost is the pattern delta's contribution to the ordering inside this
+	// step's wave (see pkg/pattern). Recorded, not folded into Score, so the
+	// plan can show why one class outranks another.
+	Boost   int      `json:"pattern_boost,omitempty"`
 	Probe   string   `json:"probe,omitempty"`
 	Why     []string `json:"why,omitempty"`
 	Cluster string   `json:"cluster,omitempty"`
@@ -88,11 +92,25 @@ var waveNames = map[string]string{
 	NeedTwoSessions: "two identities",
 }
 
+// Options adjusts the ordering without changing what the plan contains. The zero
+// value reproduces the plain ordering exactly.
+type Options struct {
+	// Boost is a small, per-class ranking signal — the pattern delta in practice.
+	// It orders steps inside one wave; it never moves a step across waves, because
+	// a missing session is a fact and a pattern is a hint.
+	Boost func(class string) int
+}
+
 // Build groups and orders a ranked queue. One step per class: a queue can hold
 // dozens of paths that all ask the same question, and the operator's protocol is
 // one target per probe — the highest-scoring path becomes the step, the rest are
 // recorded as merged so nothing is silently lost.
 func Build(p surface.Plan) Plan {
+	return BuildWith(p, Options{})
+}
+
+// BuildWith is Build with an ordering adjustment applied.
+func BuildWith(p surface.Plan, o Options) Plan {
 	out := Plan{Program: p.Program, Source: p.Generated, Generated: now()}
 
 	byClass := map[string][]surface.Hypothesis{}
@@ -118,11 +136,16 @@ func Build(p surface.Plan) Plan {
 			return group[i].Target < group[j].Target
 		})
 		top := group[0]
+		boost := 0
+		if o.Boost != nil {
+			boost = o.Boost(top.Class)
+		}
 		st := Step{
 			Needs:   needs(top.Class),
 			Target:  top.Target,
 			Class:   c,
 			Score:   top.Score,
+			Boost:   boost,
 			Probe:   top.Probe,
 			Why:     top.Why,
 			Cluster: top.Cluster,
@@ -139,6 +162,9 @@ func Build(p surface.Plan) Plan {
 		a, b := out.Steps[i], out.Steps[j]
 		if wa, wb := waveOf[a.Needs], waveOf[b.Needs]; wa != wb {
 			return wa < wb
+		}
+		if ka, kb := a.Score+a.Boost, b.Score+b.Boost; ka != kb {
+			return ka > kb
 		}
 		if a.Score != b.Score {
 			return a.Score > b.Score
@@ -159,6 +185,17 @@ func Build(p surface.Plan) Plan {
 		"One step per class: the queue is path-level, so several paths asking the same question collapse into the highest-scoring one.",
 		"Ranking and scope are hints, not verdicts. Run the scope gate (`kai scope`) before every request.",
 		"kai never sends a request while planning, and never submits a report.",
+	}
+	if o.Boost != nil {
+		boosted := 0
+		for _, s := range out.Steps {
+			if s.Boost != 0 {
+				boosted++
+			}
+		}
+		out.Notes = append(out.Notes, fmt.Sprintf(
+			"Ordering inside a wave includes the pattern delta: %d of %d step(s) carry a boost from what this archetype already produced here (kai patterns %s). Waves never move.",
+			boosted, len(out.Steps), p.Program))
 	}
 	if len(p.Items) > len(out.Steps) {
 		out.Notes = append(out.Notes, fmt.Sprintf("%d queue items collapsed into %d steps.", len(p.Items), len(out.Steps)))
@@ -230,7 +267,11 @@ func (p Plan) Markdown() string {
 			if s.Wave != w.N {
 				continue
 			}
-			fmt.Fprintf(&b, "### %d. %s — `%s` (score %d)\n\n", s.Rank, s.Class, s.Target, s.Score)
+			if s.Boost != 0 {
+				fmt.Fprintf(&b, "### %d. %s — `%s` (score %d, pattern %+d)\n\n", s.Rank, s.Class, s.Target, s.Score, s.Boost)
+			} else {
+				fmt.Fprintf(&b, "### %d. %s — `%s` (score %d)\n\n", s.Rank, s.Class, s.Target, s.Score)
+			}
 			if s.Probe != "" {
 				fmt.Fprintf(&b, "- probe: %s\n", s.Probe)
 			}

@@ -136,6 +136,8 @@ only for text sources and only after you have verified each host in `policy.md`.
 | `next <program>` | ranked test queue |
 | `outcome <program> --status S [--class C] [--note T] <target...>` | record what a target turned out to be |
 | `plan <program> [--out file]` | turn the ranked queue into waves by precondition |
+| `patterns <program> [--json] [--write] [--dir D] [--archetype A]` | what the library knows about this shape, and what it paid here |
+| `contribute <program> [--json] [--out file]` | build the anonymous payload — prints it, sends nothing |
 | `board [<program>]` | what is worth doing today, across every program |
 | `evidence <program> [list\|add\|show\|attach]` | capture the raw proof behind a finding |
 | `report-draft <program> <evidence-id> [--platform hackerone\|bugcrowd\|yandex]` | render a submission draft in the platform's fields |
@@ -262,6 +264,54 @@ kai model acme --archetype graphql-api   # the operator's word beats any inferen
   capture changes nothing, credential headers are stored as a length marker unless
   `--keep-secrets` is passed, and an imported entry never claims a finding — that stays an
   operator decision.
+
+## The pattern layer — knowledge keyed by shape
+
+`kai next` answers *what is on this surface*. `kai patterns` answers *what is worth
+doing to it*, and it is the only place in kai that ships opinions rather than
+measurements. Everything about it is deterministic: a JSON layer, a sort, and a
+delta read back from `state/outcomes.jsonl`.
+
+```
+kai patterns acme                       # coverage of the queue's classes, then the patterns
+kai patterns acme --write               # also write state/patterns-delta.json
+kai patterns acme --json                # the whole report, for another tool
+kai patterns acme --dir ~/layers        # merge local layer files over the shipped ones
+kai patterns acme --archetype chain     # override the recorded shape
+```
+
+- **Keys, not URLs.** A pattern is keyed `(archetype, entity|action|class, name)` and
+  the name is canonicalised — `IDOR/BOLA`, `idor_bola` and `idor-bola` are one key,
+  so the queue and the library cannot drift into two vocabularies for one idea.
+- **Two layers, one library.** `kai-generic/1` ships inside the binary; layer files
+  (`--dir`) are merged *over* it by key, so an operator corrects a pattern rather
+  than duplicating it. Layer files are validated: an unknown shape, family,
+  confidence outside `(0,1]`, a class the queue never assigns, or a name that looks
+  like a URL or a host is reported with its file and entry number, and the exit code
+  is non-zero. The good entries still load — a broken layer degrades, it does not
+  take the run down.
+- **Inheritance is explicit.** `graphql-api` and `mobile-api` inherit the `api`
+  layer; the report prints `this shape`, `inherited from api`, or `every shape` on
+  every pattern, so an inheritance never looks like a coincidence. `*` (unclassified)
+  still gets the every-shape patterns, and the header says `every shape` rather than
+  claiming the library knows the program.
+- **Gaps are printed as gaps.** A class the queue asks about with no pattern is
+  listed as `no pattern` and counted — an unanswered question is visible instead of
+  silently ranked at zero.
+- **The delta is per program, not per URL.** `outcomes.jsonl` becomes
+  `state/patterns-delta.json`: per key, how often it fired and how it ended. `kai
+  plan` uses it as a tie-breaker inside a wave — a class that paid here is tried
+  first, a class that was closed NEGATIVE here last. A boost can tip a two-point gap
+  and cannot overturn a strong surface signal (9 points, the realistic ceiling, does
+  not move an 80-point gap), and the step prints the boost beside the score so the
+  two are never confused. Waves still win: knowledge never reorders preconditions.
+- **(archetype, class) keys only in the payload.** `kai contribute` builds the tier-2
+  aggregate: class keys, outcome counts, and host fingerprints salted with a
+  per-workspace secret (`state/patterns-salt`, 0600) so hosts are comparable across
+  runs and meaningless outside. `Audit()` refuses a payload containing a host-shaped
+  key, a long digit run, an entity key, a foreign schema, or a raw host in the
+  fingerprint list; `--dry-run` and a plain run both print it, and **nothing is
+  sent** — kai has no transport for this and says so on every invocation.
 
 ## Scope gate and exit codes
 

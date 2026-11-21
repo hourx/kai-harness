@@ -40,6 +40,22 @@ type Verdict struct {
 	Signals    []string `json:"signals,omitempty"`
 }
 
+// Parent returns the shape whose knowledge also applies to name, or "" when the
+// shape stands alone.
+//
+// A GraphQL gateway and a mobile backend are both API servers: everything known
+// about an API surface still holds for them, and their own knowledge is a delta on
+// top of it rather than a replacement. Without this the report calls a class
+// covered by a pattern that plainly applies a gap, and an operator who sees false
+// gaps stops believing the true ones.
+func Parent(name string) string {
+	switch Normalize(name) {
+	case GraphQLAPI, MobileAPI:
+		return API
+	}
+	return ""
+}
+
 // Known reports whether name is one of the archetypes this package understands.
 func Known(name string) bool {
 	n := Normalize(name)

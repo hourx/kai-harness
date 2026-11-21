@@ -6,8 +6,11 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/hourx/kai-harness/pkg/hypothesis"
+	"github.com/hourx/kai-harness/pkg/outcome"
+	"github.com/hourx/kai-harness/pkg/pattern"
 	"github.com/hourx/kai-harness/pkg/surface"
 	"github.com/hourx/kai-harness/pkg/workspace"
 )
@@ -38,7 +41,16 @@ func cmdPlan(args []string) int {
 		return fail(fmt.Errorf("no ranked queue yet — run: kai map %s && kai next %s", p.Name, p.Name))
 	}
 
-	plan := hypothesis.Build(queue)
+	// Ordering inside a wave leans on what actually paid here before. The delta is
+	// derived from the recorded outcomes on every run, so it cannot go stale, and
+	// it is only ever a tie-breaker: the surface's own score still decides first.
+	arch, _ := patternArchetype(p, "")
+	tbl, err := outcome.Load(p.Dir)
+	if err != nil {
+		return fail(err)
+	}
+	delta := pattern.BuildDelta(p.Name, arch, tbl.Records(), time.Now().UTC())
+	plan := hypothesis.BuildWith(queue, hypothesis.Options{Boost: delta.BoostClass})
 	jsonPath, mdPath, err := hypothesis.Write(p.Dir, plan)
 	if err != nil {
 		return fail(err)
@@ -63,6 +75,10 @@ func cmdPlan(args []string) int {
 		show = len(plan.Steps)
 	}
 	for _, s := range plan.Steps[:show] {
+		if s.Boost != 0 {
+			fmt.Printf("  #%d [%s] %s — %s (score %d, pattern %+d)\n", s.Rank, s.Needs, s.Class, s.Target, s.Score, s.Boost)
+			continue
+		}
 		fmt.Printf("  #%d [%s] %s — %s (score %d)\n", s.Rank, s.Needs, s.Class, s.Target, s.Score)
 	}
 	fmt.Printf("wrote %s\nwrote %s\n", jsonPath, mdPath)
