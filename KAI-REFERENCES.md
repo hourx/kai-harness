@@ -23,6 +23,7 @@ scratch directory outside the repo.
 | 8 | gencharitaci/humanize-skills | Anti-formula prose rulebook, 10 modes, 20 languages (incl. `id.md`), no-edit gate | Report layer — call it, do not reimplement | Report module | **Adopt as-is** (already in use) |
 | 9 | monsifhmouri/SubMonsif | Small Go subdomain enumerator (crt.sh, HackerTarget, VirusTotal, OTX, Shodan + bruteforce) | Go provider abstraction pattern for recon | Recon module reference | **Low-medium** (reference only) |
 | 10 | zhaoxuya520/reverse-skill | 49 skill dirs, 412 skill files, CTF chains, Burp MCP | Not-yet-converted parts: CTF-Sandbox-Orchestrator chains | Already converted | **Already adopted** |
+| 11 | Ignitetechnologies (all 34 repos) | The GitHub mirror of hackingarticles.in: 33 of 34 repos are one README that is a table of links to blog posts; 724 MB of that is mindmap images; 33 of 34 have no licence | Names only — tool vocabulary, 22 privesc check names, product→class seed list | Adapter-list cross-check; future post-exploitation phase | **Low** (an hour of name extraction, never a clone) |
 
 ---
 
@@ -295,6 +296,66 @@ What has not been taken yet:
 - `burp-mcp-full/` — a Burp MCP implementation.
 
 **Verdict:** already adopted; the chains are the remaining cherry-pick.
+
+### 3.11 Ignitetechnologies — all 34 repos (surveyed 2026-11-23, API only, no clone)
+
+The GitHub mirror of `hackingarticles.in`, a training/consulting brand. 34 public
+repos, 6,065 followers, account opened 2016. 824 MB total, of which **724 MB is
+Mindmap images**. **33 of 34 repos have no licence file** (default: all rights
+reserved); the one MIT repo is a fork. Seven repos are forks of other people's
+work — `Outpacket`→n00py, `OSCP_Tools`→hanzobite, `awesome-tunneling`→anderspitman,
+`precompiled-binaries`→jakobfriedl, `cheatsheets`→cipher387, `myfiles`→MSaroeval,
+`PayloadsAllTheThings`→swisskyrepo. Go upstream, never to the mirror.
+
+**Shape of the content.** The overwhelming majority is one `README.md` that is a
+`| # | Topic | Description | Read Article |` table with every row pointing at a
+blog post, 0 code fences. Android-Penetration-Testing (2 KB), Nmap-For-Pentester
+(3 KB), AI-Pentest (2 KB), Command-Control (1 KB), `bugbounty` (4 KB),
+Credential-Dumping, ADCS-Attack, Abusing-DACL, AWS-Pentest, MSSQL, Wireless,
+Privacy-Protection, Linux/Windows privesc, and the HTB/Vulnhub/TryHackMe writeup
+repos are all this shape: indexes of links, not references. Whole account is 8.4 MB
+of text, and ~4.2 MB of that is fork noise (OSCP_Tools, precompiled-binaries,
+the PayloadsAllTheThings index).
+
+**The three things worth taking — names and structure only, no prose, no images:**
+
+1. `Mindmap/` — 77 top-level dirs, 424 images. The images are worthless to a text
+   pipeline; the **directory names are a free capability vocabulary**, one per tool
+   or topic: nmap, ffuf, gobuster, httpx, wfuzz, feroxbuster, sqlmap, hydra, medusa,
+   hashcat, wpscan, aircrack, nxc/crackmapexec, impacket, mimikatz, john, gtfobin,
+   IDAPro, empire, metasploit, tcpdump/tshark/wireshark — plus a governance branch
+   (FISMA, GDPR, HIPPA, ISO Control, SOC 2, NIST) and an ATT&CK branch. Useful as a
+   cross-check when extending `pkg/recon`'s adapter list (currently subfinder,
+   assetfinder, gau, waybackurls, nuclei); it confirms the set and adds no data.
+2. `Privilege-Escalation/` — the only dense repo: 22 files, 304 table rows, still 0
+   code fences. One section per local technique: SUID, sudo rights, capabilities,
+   crontab, kernel, Docker group, LXD, NFS, Redis, MySQL, PATH, wildcard injection,
+   writable `/etc/passwd`, shadow cracking, chkrootkit. Take the **check names** as
+   a post-exploitation enumeration checklist (a phase kai does not have); leave the
+   payload prose.
+3. `Web-Application-Cheatsheet/` — 84 table rows, one section per product: Drupal,
+   Jenkins, Joomla, Webmin, WordPress, Moodle, CouchDB, PHP Mailer, PlaySMS,
+   Simple PHP Blog. kai has no product branch at all (`grep -ri
+   'wordpress|drupal|jenkins' pkg/` returns nothing; surface classification stops at
+   graphql/api). Take as a **product fingerprint → known vuln class** seed list —
+   the same shape as SecurityTesting's param→class table, so an extension of an
+   existing axis, not a new one.
+
+**Rejected:** every link-table repo (a link is not a check — nothing to convert),
+all 7 forks, the three binary repos (kai ships one binary and zero dependencies),
+`Persistence-Accessibility-Features` and `Windows-…-SeImpersonation` (payloads),
+`view2akill` (CTF exploit scripts), `CTF-Difficulty`, and Mindmap's 424 images.
+
+**Licence rule, restated because this account is the strongest case yet:** no
+licence file means all rights reserved. Reading it to learn is fine; shipping its
+text or images inside a released product is not. Convert to (check|probe|oracle|
+rule), write kai's own words, and keep `source: Ignitetechnologies/<repo>` +
+`confidence` only where the claim was independently verified.
+
+**Verdict: low.** A marketing funnel with one usable table. An hour of name
+extraction, never a clone — and everything valuable here already exists in the
+corpus from licensed sources (Claude-BugHunter's taxonomy beats their `bugbounty`
+list; SecurityTesting's checklists beat their Burp and Web-App tables).
 
 ---
 
