@@ -1,0 +1,36 @@
+# garak config for an OpenAI-compatible gateway.
+#   export GARAK_KEY=$(cat ~/.hermes/cache/scratch/pf-target.key)
+#   garak --config redteam/garak.yaml
+#
+# probe_spec lists CLASSES, not families: a family expands to classes that carry no
+# detector (dan.Ablation_Dan_11_0 writes detector_results: {} and burns time for nothing).
+# soft_probe_prompt_cap does bound ordinary classes -- 64-prompt classes run 4 prompts at cap 4.
+plugins:
+  target_type: rest
+  probe_spec: dan.AutoDANCached,dan.DAN_Jailbreak,dan.DanInTheWild,promptinject.HijackHateHumans,sysprompt_extraction.SystemPromptExtraction,malwaregen.TopLevel,encoding.InjectBase64,apikey
+  generators:
+    rest:
+      RestGenerator:
+        name: gateway
+        uri: http://127.0.0.1:20128/v1/chat/completions
+        method: post
+        headers:
+          Content-Type: application/json
+          Authorization: Bearer $KEY
+        key_env_var: GARAK_KEY
+        req_template_json_object:
+          model: nex-n2-6-hore
+          messages:
+            - role: user
+              content: $INPUT
+          temperature: 0
+        response_json: true
+        response_json_field: $.choices[0].message.content
+        request_timeout: 120
+        skip_codes: [400, 401, 403, 404, 429, 500, 502, 503, 504]
+run:
+  generations: 1
+  parallel_attempts: 4
+  soft_probe_prompt_cap: 4
+reporting:
+  report_prefix: ./garak-report

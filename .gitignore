@@ -9,3 +9,8 @@ dist/
 
 # build output
 /kai
+
+# red-team run artifacts (raw model output; keep configs + tests, not captures)
+redteam/*.json
+redteam/garak-report*
+redteam/*.log
