@@ -33,6 +33,9 @@ tool.
 
 ---
 
+**New here?** [`GUIDE.md`](GUIDE.md) is the walkthrough — install, first program, the daily loop.
+This file is the reference.
+
 ## Install
 
 With Go installed:
