@@ -313,6 +313,41 @@ kai patterns acme --archetype chain     # override the recorded shape
   fingerprint list; `--dry-run` and a plain run both print it, and **nothing is
   sent** — kai has no transport for this and says so on every invocation.
 
+## The planner seam — a model at the edge, never in the kernel
+
+`kai next` ranks what a surface offers and `kai patterns` says what is worth doing to it.
+`kai decide` is the one place a model is allowed to help, and it is a seam: it reads the same
+artifacts, validates everything it gets back, and writes a plan. It never opens a socket to a
+target and it never runs a step.
+
+```
+kai decide acme                        # propose, validate, write state/proposal.json
+kai decide acme --json                 # machine-readable
+kai decide acme --deterministic        # skip the model even if one is configured
+kai decide acme --dry-run              # print only; nothing written, no budget spent
+kai decide acme --limit 6 --archetype api
+```
+
+- **The model proposes; the kernel disposes.** Every step is re-checked against the scope gate
+  and the action policy before it survives. A host the scope does not name is dropped — never
+  "repaired" into something that might be in scope. A destructive action is refused on sight.
+  `read-only` is the only class that may run unattended; `state-changing` stays in the plan
+  marked as needing the operator's word, every time.
+- **Two target shapes.** A step may name a host from the brief's `hosts` list
+  (`api.example.com/orders`), or a path on the program's surface (`GET /orders`) — the shape
+  the ranked queue already uses. A path-only step is kept only when the scope names a host to
+  attach it to, and it carries that reminder in its rationale.
+- **It degrades toward the artifact.** No endpoint, the kill switch, an unreachable model, a
+  malformed reply: every one of them falls back to the deterministic proposer, which turns the
+  ranked queue into the same `Plan` shape. The plan records which proposer answered, and why
+  the other one did not. A run with the model switched off is a normal, complete run.
+- **Budgets are enforced before a request is sent.** `state/planner.json` (0600) sets the
+  endpoint, the model, and a per-day token ceiling; `state/planner.off` disables the model
+  outright, so switching it off is one file rather than an edit. The day's spend is a ledger
+  that resets with the date, and a spent budget runs the deterministic proposer instead of
+  raising an error. Endpoint, model, key and ceilings can also come from `KAI_PLANNER_*`, and
+  `KAI_PLANNER=off` is a second kill switch.
+
 ## Scope gate and exit codes
 
 `kai scope <program> <host|cidr>` is the single source of truth for whether a target
@@ -586,6 +621,9 @@ Current line: `kai 0.16.0`.
 | v0.14 | platform drivers as embedded data, `state/program.yaml` program contract, `kai drivers` / `kai contract --audit` |
 | v0.15 | live run stream: `GET /api/v1/programs/<n>/watch` (SSE over the recorded event log) and the dashboard's `watch live` panel |
 | v0.16 | program model (`kai model`), archetype verdict (`pkg/archetype`), coverage ledger + exploration rows, bulk HAR import into the evidence store |
+| v0.17 | pattern layer: `kai patterns` / `kai contribute`, a JSON layer validated over the shipped one, and a ranking delta read back from outcomes |
+| v0.18 | shadow lesson loop: `kai shadow` proposes a lesson from this workspace's outcomes and adopts it one at a time into `state/pattern-overrides.json` |
+| v0.19 | LLM planner seam: `kai decide` turns the brief into scope-gated steps, with a deterministic proposer that runs the whole path on a box with no model |
 
 `kai` is a context preparer and an evidence bookkeeper, not a hunting agent. The full design
 lives in [`SPEC.md`](SPEC.md); the improvement roadmap in [`IMPROVEMENT-PLAN.md`](IMPROVEMENT-PLAN.md).
@@ -605,6 +643,8 @@ The deterministic core lives under `pkg/` and is importable:
 | `pkg/model`, `pkg/archetype` | program model (entities, anomalies, coverage, gaps) and the archetype verdict |
 | `pkg/evidence` | hashed evidence capture, incl. bulk HAR import |
 | `pkg/report` | platform field sets |
+| `pkg/pattern`, `pkg/shadow` | knowledge keyed by shape, and the lesson loop over outcomes |
+| `pkg/planner` | the LLM seam: brief, proposer, scope-gated validation, the plan artifact |
 | `pkg/outcome`, `pkg/triage`, `pkg/workspace` | ledgers and state |
 | `pkg/serve` | read-only HTTP/JSON face over the workspace |
 | `pkg/progress` | run events the terminal workspace renders |

@@ -433,6 +433,12 @@ hypothesis queue; (2) evidence adjudicator — the Skeptic replacement; (3) unst
 translator — policy pages, PDFs, JS; (4) report drafter. Requirement: with the LLM disabled, kai still
 produces a complete, useful output (deterministic fallback). No LLM ever sits in the request path.
 
+**Status.** Role (1), the plan adjudicator, **shipped in v0.19.0** as `pkg/planner` + `kai decide`:
+the proposer is asked for steps, the kernel re-validates every one against the scope gate and the
+action policy, and with no endpoint configured the deterministic proposer turns the ranked queue into
+the same `Plan` artifact — so a run with the model switched off is a complete run, not a degraded one.
+Roles (2)–(4) remain the agent's job.
+
 ## 13. Decisions locked with the operator (2026-11-20)
 
 - **Name:** repo + module `kai-harness`; CLI binary stays `kai`. Applied to repo, module path, working

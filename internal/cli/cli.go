@@ -74,6 +74,8 @@ Commands:
   contribute <program> [--json] [--out f]                     build the anonymous pattern payload (never sent)
   shadow  <program> [--json] [--write] [--adopt ID|--revert ID|all]
                                                              lessons this workspace's outcomes propose (nothing applied)
+  decide  <program> [--json] [--limit N] [--deterministic] [--dry-run]
+                    [--archetype NAME] [--out file]            ask the planner for the next steps (scope-gated)
   plan    <program>                                          queue -> waves by what each step needs
   board   [<program>]                                        what is worth doing today (all programs)
   evidence <program> [list|add|import|show|attach] [--har f]  capture the raw proof behind a finding
@@ -165,6 +167,8 @@ func Run(args []string) int {
 		return cmdContribute(args[1:])
 	case "shadow":
 		return cmdShadow(args[1:])
+	case "decide":
+		return cmdDecide(args[1:])
 	case "plan":
 		return cmdPlan(args[1:])
 	case "board":
