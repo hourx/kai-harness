@@ -307,9 +307,10 @@ work — `Outpacket`→n00py, `OSCP_Tools`→hanzobite, `awesome-tunneling`→an
 `precompiled-binaries`→jakobfriedl, `cheatsheets`→cipher387, `myfiles`→MSaroeval,
 `PayloadsAllTheThings`→swisskyrepo. Go upstream, never to the mirror.
 
-**Shape of the content.** The overwhelming majority is one `README.md` that is a
-`| # | Topic | Description | Read Article |` table with every row pointing at a
-blog post, 0 code fences. Android-Penetration-Testing (2 KB), Nmap-For-Pentester
+**Shape of the content.** 19 of the 34 repos are link tables: **732 article rows,
+881 distinct URLs, 731 of them blog posts on `www.hackingarticles.in`** (the rest:
+57 exploit-db, 14 rapid7, 4 github, plus social). Every one is a `README.md` that is a
+`| # | Topic | Description | Read Article |` table, 0 code fences. Android-Penetration-Testing (2 KB), Nmap-For-Pentester
 (3 KB), AI-Pentest (2 KB), Command-Control (1 KB), `bugbounty` (4 KB),
 Credential-Dumping, ADCS-Attack, Abusing-DACL, AWS-Pentest, MSSQL, Wireless,
 Privacy-Protection, Linux/Windows privesc, and the HTB/Vulnhub/TryHackMe writeup
